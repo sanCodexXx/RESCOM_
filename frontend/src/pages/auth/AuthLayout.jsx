@@ -12,7 +12,7 @@ export function LoginLayout({ children }) {
     <div className="min-h-screen relative bg-navy-900 overflow-hidden flex">
       <img src={bg} alt="" className="absolute inset-0 w-full h-full object-cover" />
       <div className="absolute inset-0 bg-gradient-to-r from-[#0a1450]/90 via-[#0a1450]/70 to-[#0a1450]/45" />
-      <div className="relative z-10 w-full max-w-[1280px] mx-auto grid lg:grid-cols-2 gap-6 px-6 sm:px-10">
+      <div className="relative z-10 w-full min-w-0 max-w-[1280px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 px-4 sm:px-10">
         <div className="hidden lg:flex flex-col py-10">
           <div className="flex items-center gap-3">
             <Logo size={64} />
@@ -22,10 +22,10 @@ export function LoginLayout({ children }) {
           <p className="text-white/75 text-[16px] mt-4 max-w-[340px]">Monitoring, reporting, and responding to emergencies effectively.</p>
           <img src={medics} alt="" className="mt-auto w-[440px] max-w-full -mb-2 drop-shadow-2xl" />
         </div>
-        <div className="flex flex-col items-center justify-center py-10">
-          <div className="lg:hidden flex items-center gap-3 mb-6"><Logo size={52} /><b className="text-white text-lg">MDRRMO San Nicolas</b></div>
+        <div className="min-w-0 flex flex-col items-center justify-center py-8 sm:py-10">
+          <div className="lg:hidden flex items-center justify-center gap-3 mb-6 max-w-full"><Logo size={52} /><b className="text-white text-lg leading-tight">MDRRMO San Nicolas</b></div>
           {children}
-          <p className="text-white/60 text-[11.5px] mt-6 text-center">©2026 MDRRMO San Nicolas, Ilocos Norte. All rights reserved.</p>
+          <p className="text-white/60 text-[11.5px] mt-6 text-center px-2">©2026 MDRRMO San Nicolas, Ilocos Norte. All rights reserved.</p>
         </div>
       </div>
     </div>
@@ -36,11 +36,12 @@ export function LoginLayout({ children }) {
 export function RegisterLayout({ children }) {
   const items = [['Create Account', 'Sign up to access the system and its features.'], ['Stay Informed', 'Receive real-time updates and alerts.'], ['Report Easily', 'Submit reports and monitor evacuation activities.']];
   return (
-    <div className="min-h-screen grid lg:grid-cols-[1.05fr_1fr]">
-      <div className="relative grid place-items-center p-6 py-10 overflow-hidden">
+    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-[1.05fr_1fr]">
+      <div className="relative min-w-0 flex flex-col items-center justify-center px-4 sm:px-6 py-8 sm:py-10 overflow-hidden">
         <img src={bg} alt="" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-[#0a1450]/70" />
-        <div className="relative z-10 w-full flex justify-center">{children}</div>
+        <div className="lg:hidden relative z-10 flex items-center justify-center gap-3 mb-5 max-w-full"><Logo size={48} /><b className="text-white text-lg leading-tight">MDRRMO San Nicolas</b></div>
+        <div className="relative z-10 w-full min-w-0 flex justify-center">{children}</div>
       </div>
       <div className="hidden lg:flex flex-col items-center bg-[#eaf2fd] px-12 pt-14 overflow-hidden">
         <Logo size={92} />
@@ -64,8 +65,8 @@ export function RegisterLayout({ children }) {
    copy on the left, the active step's form on the right. */
 export function ForgotLayout({ children }) {
   return (
-    <div className="min-h-screen bg-[#f4f5f7] grid place-items-center p-6">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[900px] grid md:grid-cols-2 gap-10 p-8 sm:p-10 items-center">
+    <div className="min-h-screen bg-[#f4f5f7] flex items-center justify-center p-4 sm:p-6">
+      <div className="bg-white rounded-2xl shadow-2xl w-full min-w-0 max-w-[900px] grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10 p-6 sm:p-10 items-center">
         {children}
       </div>
     </div>
@@ -73,6 +74,6 @@ export function ForgotLayout({ children }) {
 }
 
 export function AuthCard({ children, className = '' }) {
-  return <div className={`bg-white rounded-2xl shadow-2xl p-8 sm:p-9 w-full max-w-[430px] ${className}`}>{children}</div>;
+  return <div className={`bg-white rounded-2xl shadow-2xl p-6 sm:p-9 w-full max-w-[430px] min-w-0 ${className}`}>{children}</div>;
 }
 export default LoginLayout;

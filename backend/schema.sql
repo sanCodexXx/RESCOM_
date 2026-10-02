@@ -4,6 +4,7 @@
 -- project documentation (Activity 4 supporting docs).
 -- ============================================================
 
+DROP TABLE IF EXISTS CENTER_IMAGES CASCADE;
 DROP TABLE IF EXISTS PASSWORD_RESETS CASCADE;
 DROP TABLE IF EXISTS USER_NOTIFICATIONS CASCADE;
 DROP TABLE IF EXISTS NOTIFICATIONS CASCADE;
@@ -74,6 +75,14 @@ CREATE TABLE EVACUATION_CENTERS (
   status       VARCHAR(30) NOT NULL DEFAULT 'Open'
                CHECK (status IN ('Open', 'Full', 'Standby', 'Closed')),
   image_url    VARCHAR(255)
+);
+
+-- Center photos live in the database (not on disk) so they persist on hosts
+-- with an ephemeral filesystem. image_url points at GET /api/centers/:id/image
+CREATE TABLE CENTER_IMAGES (
+  center_id  INTEGER PRIMARY KEY REFERENCES EVACUATION_CENTERS(center_id) ON DELETE CASCADE,
+  image_data BYTEA NOT NULL,
+  image_type VARCHAR(50) NOT NULL DEFAULT 'image/jpeg'
 );
 
 -- ------------------------------------------------------------
