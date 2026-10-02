@@ -113,13 +113,38 @@ export default function Centers() {
 }
 
 function CenterForm({ initial, onChange, onFile }) {
+  const { toast } = useUi();
   const [form, setForm] = useState(initial);
   const [preview, setPreview] = useState(initial.image_url || '');
   const set = (k, v) => { const next = { ...form, [k]: v }; setForm(next); onChange(next); };
 
-  function pickImage(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Phone photos are often 4-12 MB. Resize to max 1280px JPEG (~150-300 KB)
+  // in the browser before uploading, so it is fast and under the size limit.
+  async function shrink(file, maxSide = 1280, quality = 0.82) {
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(bmp.width * scale);
+      canvas.height = Math.round(bmp.height * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff'; // transparent PNGs would turn black as JPEG
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', quality));
+      return blob ? new File([blob], 'center.jpg', { type: 'image/jpeg' }) : file;
+    } catch (err) {
+      // The browser couldn't decode it. Plain web formats can still be sent
+      // as-is; anything else (e.g. HEIC on Chrome/Windows) can't be shown.
+      return /^image\/(jpe?g|png|webp|gif)$/.test(file.type) ? file : null;
+    }
+  }
+
+  async function pickImage(e) {
+    const picked = e.target.files?.[0];
+    if (!picked) return;
+    const file = await shrink(picked);
+    if (!file) { toast('This photo format cannot be read by your browser. Please choose a JPG or PNG.', 'bad'); e.target.value = ''; return; }
     onFile(file);
     setPreview(URL.createObjectURL(file));
   }
@@ -135,7 +160,7 @@ function CenterForm({ initial, onChange, onFile }) {
             <span className="text-[12px] font-semibold text-accent-700">{preview ? 'Change photo' : 'Upload photo'}</span>
             <p className="text-[10.5px] text-navy-900/40">JPG, PNG or WEBP — up to 5MB</p>
           </div>
-          <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={pickImage} />
+          <input type="file" accept="image/*" className="hidden" onChange={pickImage} />
         </label>
       </Field>
       <Field label="Center Name"><Ctrl><TextInput value={form.center_name} onChange={e => set('center_name', e.target.value)} placeholder="e.g. Brgy. 5 Covered Court" /></Ctrl></Field>
