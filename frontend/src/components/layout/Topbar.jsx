@@ -79,7 +79,7 @@ export default function Topbar({ onToggleSidebar, onNav, onLogout }) {
   const initials = user ? (user.first_name?.[0] || '') + (user.last_name?.[0] || '') : '';
 
   return (
-    <header className="h-[62px] glass border-x-0 border-t-0 flex items-center px-5 gap-3.5 sticky top-0 z-20" ref={ref}>
+    <header className="h-[62px] glass border-x-0 border-t-0 flex items-center px-3 sm:px-5 gap-2 sm:gap-3.5 sticky top-0 z-20" ref={ref}>
       <button onClick={onToggleSidebar} className="text-navy-900/60 hover:bg-navy-900/8 rounded-lg p-2"><Menu size={18} /></button>
       <div className="flex-1" />
 
@@ -89,7 +89,7 @@ export default function Topbar({ onToggleSidebar, onNav, onLogout }) {
           {unread > 0 && <span className="absolute top-0.5 right-0.5 bg-danger text-white text-[9px] rounded-full px-1 font-bold">{unread}</span>}
         </button>
         {openNotif && (
-          <div className="absolute top-11 right-0 glass-strong rounded-2xl shadow-glass w-[320px] overflow-hidden z-40">
+          <div className="fixed left-3 right-3 top-[68px] sm:absolute sm:top-11 sm:left-auto sm:right-0 glass-strong rounded-2xl shadow-glass sm:w-[320px] overflow-hidden z-40">
             <div className="px-4 py-3.5 border-b border-navy-900/8 flex items-center justify-between">
               <h4 className="text-[13px] font-semibold m-0 text-navy-900">Notifications</h4>
               {unread > 0 && <button onClick={markAllRead} className="text-[11px] font-semibold text-accent-700 hover:underline flex items-center gap-1"><CheckCheck size={12} />Mark all read</button>}

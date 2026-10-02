@@ -15,7 +15,7 @@ export const NAV = [
 
 export default function Sidebar({ open, route, onNav, onLogout, role }) {
   return (
-    <aside className={`w-[240px] shrink-0 glass-dark text-white p-3 flex flex-col sticky top-0 h-screen transition-[margin-left] ${!open ? '-ml-[240px]' : ''}`}>
+    <aside className={`w-[240px] shrink-0 glass-dark text-white p-3 flex flex-col fixed lg:sticky top-0 left-0 z-40 h-[100dvh] overflow-y-auto transition-transform lg:transition-[margin-left] ${open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0 lg:-ml-[240px]'}`}>
       <div className="flex gap-2.5 items-center px-1.5 pb-5 pt-1">
         <img src={logo} alt="" className="w-[42px] h-[42px] object-contain shrink-0" />
         <div>

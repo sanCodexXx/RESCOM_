@@ -23,7 +23,7 @@ export function ModalHost() {
     >
       {modal && (
         <div className="glass-strong rounded-glass w-full max-w-[560px] max-h-[88vh] overflow-auto shadow-glass anim-pop scroll-thin">
-          <div className="px-6 pt-5 flex justify-between items-start gap-3">
+          <div className="px-4 sm:px-6 pt-5 flex justify-between items-start gap-3">
             <div>
               <b className="text-[17px] text-navy-900">{modal.title}</b>
               {modal.sub && <p className="text-[12.5px] text-navy-900/55 mt-1">{modal.sub}</p>}
@@ -32,8 +32,8 @@ export function ModalHost() {
               <X size={18} />
             </button>
           </div>
-          <div className="px-6 py-5">{modal.body}</div>
-          <div className="px-6 pb-6 flex gap-2.5">{modal.footer}</div>
+          <div className="px-4 sm:px-6 py-5">{modal.body}</div>
+          <div className="px-4 sm:px-6 pb-6 flex flex-wrap gap-2.5">{modal.footer}</div>
         </div>
       )}
 

@@ -120,13 +120,13 @@ function UserForm({ initial, isNew, onChange }) {
   const set = (k, v) => { const next = { ...form, [k]: v }; setForm(next); onChange(next); };
   return (
     <>
-      <div className="grid grid-cols-2 gap-x-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
         <Field label="First Name"><Ctrl><TextInput value={form.first_name} onChange={e => set('first_name', e.target.value)} /></Ctrl></Field>
         <Field label="Last Name"><Ctrl><TextInput value={form.last_name} onChange={e => set('last_name', e.target.value)} /></Ctrl></Field>
       </div>
       {isNew && <Field label="Username"><Ctrl><TextInput value={form.username} onChange={e => set('username', e.target.value)} /></Ctrl></Field>}
       <Field label="Email Address"><Ctrl><TextInput value={form.email} onChange={e => set('email', e.target.value)} /></Ctrl></Field>
-      <div className="grid grid-cols-2 gap-x-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
         <Field label="Role"><Ctrl><Select value={form.role} onChange={e => set('role', e.target.value)}>
           <option value="FIELD_PERSONNEL">Field Personnel</option>
           <option value="ADMIN_STAFF">Admin Staff</option>

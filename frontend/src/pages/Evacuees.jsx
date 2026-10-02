@@ -167,12 +167,12 @@ function EditForm({ initial, onChange }) {
   const set = (k, v) => { const next = { ...form, [k]: v }; setForm(next); onChange(next); };
   return (
     <>
-      <div className="grid grid-cols-3 gap-x-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-3">
         <Field label="First Name"><Ctrl><TextInput value={form.first_name} onChange={e => set('first_name', e.target.value)} /></Ctrl></Field>
         <Field label="Middle Name"><Ctrl><TextInput value={form.middle_name} onChange={e => set('middle_name', e.target.value)} /></Ctrl></Field>
         <Field label="Last Name"><Ctrl><TextInput value={form.last_name} onChange={e => set('last_name', e.target.value)} /></Ctrl></Field>
       </div>
-      <div className="grid grid-cols-2 gap-x-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
         <Field label="Age"><Ctrl><TextInput type="number" value={form.age} onChange={e => set('age', e.target.value)} /></Ctrl></Field>
         <Field label="Gender"><Ctrl><Select value={form.gender} onChange={e => set('gender', e.target.value)}><option>Male</option><option>Female</option></Select></Ctrl></Field>
       </div>
@@ -187,17 +187,17 @@ function RegisterForm({ initial, centers, incidents, onChange }) {
 
   return (
     <>
-      <div className="grid grid-cols-3 gap-x-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-3">
         <Field label="First Name"><Ctrl><TextInput value={form.first_name} onChange={e => set('first_name', e.target.value)} /></Ctrl></Field>
         <Field label="Middle Name"><Ctrl><TextInput value={form.middle_name} onChange={e => set('middle_name', e.target.value)} /></Ctrl></Field>
         <Field label="Last Name"><Ctrl><TextInput value={form.last_name} onChange={e => set('last_name', e.target.value)} /></Ctrl></Field>
       </div>
-      <div className="grid grid-cols-2 gap-x-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
         <Field label="Age"><Ctrl><TextInput type="number" value={form.age} onChange={e => set('age', e.target.value)} /></Ctrl></Field>
         <Field label="Gender"><Ctrl><Select value={form.gender} onChange={e => set('gender', e.target.value)}><option>Male</option><option>Female</option></Select></Ctrl></Field>
       </div>
       <Field label="Family Name"><Ctrl><TextInput value={form.family_name} onChange={e => set('family_name', e.target.value)} placeholder="e.g. Santos Family" /></Ctrl></Field>
-      <div className="grid grid-cols-2 gap-x-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
         <Field label="Barangay of Origin"><Ctrl><TextInput value={form.barangay} onChange={e => set('barangay', e.target.value)} placeholder="e.g. Barangay 12" /></Ctrl></Field>
         <Field label="Contact Number"><Ctrl><TextInput value={form.contact_number} onChange={e => set('contact_number', e.target.value)} /></Ctrl></Field>
       </div>

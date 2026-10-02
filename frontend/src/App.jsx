@@ -40,7 +40,7 @@ export default function App() {
   const [authView, setAuthView] = useState('login');
   const [route, setRoute] = useState('dashboard');
   const [ctx, setCtx] = useState({});
-  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 900);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
 
   useEffect(() => {
     const t = setTimeout(() => setShowSplash(false), 1600);
@@ -55,7 +55,7 @@ export default function App() {
   const nav = useCallback((r, c = {}) => {
     setRoute(r);
     setCtx(c);
-    if (window.innerWidth < 900) setSidebarOpen(false);
+    if (window.innerWidth < 1024) setSidebarOpen(false);
     window.scrollTo(0, 0);
   }, []);
 

@@ -5,10 +5,11 @@ import Topbar from './Topbar.jsx';
 export default function Shell({ route, sidebarOpen, onToggleSidebar, onNav, onLogout, role, children }) {
   return (
     <div className="flex min-h-screen">
+      {sidebarOpen && <div className="lg:hidden fixed inset-0 bg-navy-900/50 z-30" onClick={onToggleSidebar} />}
       <Sidebar open={sidebarOpen} route={route} onNav={onNav} onLogout={onLogout} role={role} />
       <div className="flex-1 min-w-0 flex flex-col">
         <Topbar onToggleSidebar={onToggleSidebar} onNav={onNav} onLogout={onLogout} />
-        <div className="p-6 flex-1">{children}</div>
+        <div className="p-4 sm:p-6 flex-1">{children}</div>
       </div>
     </div>
   );
