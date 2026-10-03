@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Lock, KeyRound, MessageSquare, Info } from 'lucide-react';
+import { ArrowLeft, Lock, KeyRound, Mail, Phone, Info } from 'lucide-react';
 import { ForgotLayout } from './AuthLayout.jsx';
 import { Field, Ctrl, TextInput } from '../../components/ui/Field.jsx';
 import Button from '../../components/ui/Button.jsx';
@@ -22,21 +22,26 @@ import illustration from '../../assets/forgotpass.png';
 export default function ForgotPassword({ goto }) {
   const { toast, openSuccess } = useUi();
   const [step, setStep] = useState(1);
-  const [identifier, setIdentifier] = useState('');
-  const [channel, setChannel] = useState('email');
+  const [channel, setChannel] = useState('email');       // 'email' | 'sms'
+  const [emailVal, setEmailVal] = useState('');
+  const [phoneVal, setPhoneVal] = useState('');
   const [pin, setPin] = useState('');
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
   const [busy, setBusy] = useState(false);
   const [devPin, setDevPin] = useState(null);
 
+  // Steps 2 and 3 must identify the account the same way step 1 did.
+  const who = () => (channel === 'email' ? { identifier: emailVal.trim() } : { phone: phoneVal.trim() });
+
   async function requestPin(e) {
     e?.preventDefault();
-    if (!identifier.trim()) return toast('Enter your email or username.', 'bad');
+    if (channel === 'email' && !emailVal.trim()) return toast('Enter your email or username.', 'bad');
+    if (channel === 'sms' && phoneVal.replace(/\D/g, '').length < 10) return toast('Enter a valid mobile number, e.g. 0917 123 4567.', 'bad');
     setBusy(true);
     setDevPin(null);
     try {
-      const r = await api.post('/auth/forgot-password/request', { identifier: identifier.trim(), channel }, { auth: false });
+      const r = await api.post('/auth/forgot-password/request', { ...who(), channel }, { auth: false });
       toast(r.dev_pin ? 'PIN generated (dev mode — see below)' : r.message, r.dev_pin ? 'warn' : 'ok');
       if (r.dev_pin) setDevPin(r.dev_pin);
       setStep(2);
@@ -49,7 +54,7 @@ export default function ForgotPassword({ goto }) {
     if (pin.trim().length !== 6) return toast('Enter the 6-digit code.', 'bad');
     setBusy(true);
     try {
-      await api.post('/auth/forgot-password/verify', { identifier: identifier.trim(), pin: pin.trim() }, { auth: false });
+      await api.post('/auth/forgot-password/verify', { ...who(), pin: pin.trim() }, { auth: false });
       setStep(3);
     } catch (e) { toast(e.message, 'bad'); }
     finally { setBusy(false); }
@@ -61,7 +66,7 @@ export default function ForgotPassword({ goto }) {
     if (pw !== pw2) return toast('Passwords do not match.', 'bad');
     setBusy(true);
     try {
-      await api.post('/auth/forgot-password/reset', { identifier: identifier.trim(), pin: pin.trim(), new_password: pw }, { auth: false });
+      await api.post('/auth/forgot-password/reset', { ...who(), pin: pin.trim(), new_password: pw }, { auth: false });
       openSuccess({ title: 'Password updated', message: 'You can now log in with your new password.' });
       goto('login');
     } catch (e) { toast(e.message, 'bad'); }
@@ -69,8 +74,13 @@ export default function ForgotPassword({ goto }) {
   }
 
   const COPY = {
-    1: { title: 'Forgot Password?', sub: "No worries! Enter your email and we'll send you a code to reset your password." },
-    2: { title: 'Verify Your Code', sub: `We sent a 6-digit code to you via ${channel === 'email' ? 'email' : 'SMS'}. Enter it below — it expires in 10 minutes.` },
+    1: {
+      title: 'Forgot Password?',
+      sub: channel === 'email'
+        ? "No worries! Enter your email and we'll send you a code to reset your password."
+        : "No worries! Enter the mobile number saved on your account and we'll text you a code."
+    },
+    2: { title: 'Verify Your Code', sub: `We sent a 6-digit code to your ${channel === 'email' ? 'email' : 'mobile number by SMS'}. Enter it below — it expires in 10 minutes.` },
     3: { title: 'Reset Your Password', sub: 'Create a new password for your account.' }
   }[step];
 
@@ -85,17 +95,55 @@ export default function ForgotPassword({ goto }) {
       <div>
         {step === 1 && (
           <form onSubmit={requestPin}>
-            <Field label="Email Address">
-              <Ctrl><TextInput placeholder="Enter your email address" value={identifier} onChange={e => setIdentifier(e.target.value)} autoFocus /></Ctrl>
-            </Field>
-            <Button type="submit" variant="dark" block disabled={busy}>{busy ? 'Sending…' : 'Send Reset Link'}</Button>
-            <button
-              type="button"
-              onClick={() => setChannel(c => c === 'email' ? 'sms' : 'email')}
-              className="w-full text-center text-[12px] font-medium text-navy-900/45 hover:text-accent-700 mt-3 flex items-center justify-center gap-1.5"
-            >
-              <MessageSquare size={13} /> {channel === 'email' ? 'Send the code by SMS instead' : 'Send the code by email instead'}
-            </button>
+            {/* Email / Phone switch */}
+            <div role="tablist" aria-label="Send code to" className="grid grid-cols-2 gap-1 p-1 mb-5 rounded-xl bg-navy-900/[0.06]">
+              {[['email', 'Email', Mail], ['sms', 'Phone', Phone]].map(([key, label, Icon]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={channel === key}
+                  onClick={() => setChannel(key)}
+                  className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-[13px] font-semibold transition ${channel === key ? 'bg-white text-navy-900 shadow-sm' : 'text-navy-900/50 hover:text-navy-900/80'}`}
+                >
+                  <Icon size={15} /> {label}
+                </button>
+              ))}
+            </div>
+
+            {channel === 'email' ? (
+              <Field label="Email Address or Username" key="email-field">
+                <Ctrl icon={<Mail size={16} />}>
+                  <TextInput
+                    type="text"
+                    autoComplete="username"
+                    placeholder="Enter your email address"
+                    value={emailVal}
+                    onChange={e => setEmailVal(e.target.value)}
+                    autoFocus
+                  />
+                </Ctrl>
+              </Field>
+            ) : (
+              <Field label="Mobile Number" key="phone-field">
+                <Ctrl icon={<Phone size={16} />}>
+                  <TextInput
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    placeholder="09XX XXX XXXX"
+                    value={phoneVal}
+                    onChange={e => setPhoneVal(e.target.value.replace(/[^\d+\s()-]/g, ''))}
+                    autoFocus
+                  />
+                </Ctrl>
+                <div className="text-[11.5px] text-navy-900/50 mt-1.5">Use the mobile number saved on your account.</div>
+              </Field>
+            )}
+
+            <Button type="submit" variant="dark" block disabled={busy}>
+              {busy ? 'Sending…' : channel === 'email' ? 'Send Code by Email' : 'Send Code by SMS'}
+            </Button>
             <button type="button" onClick={() => goto('login')} className="w-full text-center text-[13px] font-semibold text-accent-700 hover:underline mt-5 flex items-center justify-center gap-1.5">
               <ArrowLeft size={14} /> Back to Login
             </button>

@@ -1,7 +1,7 @@
 import React from 'react';
 import logo from '../../assets/SanNicolasLogo.png';
 import bg from '../../assets/medicfullbg.png';
-import medics from '../../assets/medicnobg.png';
+import medicsHero from '../../assets/medics-hero.webp';
 import ambulance from '../../assets/ambulance2buddies.png';
 
 export const Logo = ({ size = 56 }) => <img src={logo} alt="San Nicolas MDRRMC" style={{ width: size, height: size }} className="object-contain" />;
@@ -12,6 +12,15 @@ export function LoginLayout({ children }) {
     <div className="min-h-screen relative bg-navy-900 overflow-hidden flex">
       <img src={bg} alt="" className="absolute inset-0 w-full h-full object-cover" />
       <div className="absolute inset-0 bg-gradient-to-r from-[#0a1450]/90 via-[#0a1450]/70 to-[#0a1450]/45" />
+      {/* The three responders: sized from the viewport height so their heads rise up to the
+          tagline, capped by width so they never run under the login card. Sits behind the text. */}
+      <img
+        src={medicsHero}
+        alt=""
+        aria-hidden="true"
+        className="hidden lg:block absolute left-0 bottom-0 z-[5] pointer-events-none select-none object-contain object-left-bottom drop-shadow-2xl"
+        style={{ height: 'max(260px, calc(100vh - 260px))', maxWidth: '66vw', width: 'auto', marginLeft: '-2vw' }}
+      />
       <div className="relative z-10 w-full min-w-0 max-w-[1280px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 px-4 sm:px-10">
         <div className="hidden lg:flex flex-col py-10">
           <div className="flex items-center gap-3">
@@ -20,7 +29,6 @@ export function LoginLayout({ children }) {
           </div>
           <h2 className="text-white text-[44px] font-bold leading-[1.1] mt-14 max-w-[420px]">Together for a Safer Community</h2>
           <p className="text-white/75 text-[16px] mt-4 max-w-[340px]">Monitoring, reporting, and responding to emergencies effectively.</p>
-          <img src={medics} alt="" className="mt-auto w-[440px] max-w-full -mb-2 drop-shadow-2xl" />
         </div>
         <div className="min-w-0 flex flex-col items-center justify-center py-8 sm:py-10">
           <div className="lg:hidden flex items-center justify-center gap-3 mb-6 max-w-full"><Logo size={52} /><b className="text-white text-lg leading-tight">MDRRMO San Nicolas</b></div>

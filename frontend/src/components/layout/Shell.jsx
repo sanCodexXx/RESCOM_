@@ -5,7 +5,7 @@ import Topbar from './Topbar.jsx';
 export default function Shell({ route, sidebarOpen, onToggleSidebar, onNav, onLogout, role, children }) {
   return (
     <div className="flex min-h-screen">
-      {sidebarOpen && <div className="lg:hidden fixed inset-0 bg-navy-900/50 z-30" onClick={onToggleSidebar} />}
+      {sidebarOpen && <div className="md:hidden fixed inset-0 bg-black/45 z-30" onClick={onToggleSidebar} />}
       <Sidebar open={sidebarOpen} route={route} onNav={onNav} onLogout={onLogout} role={role} />
       <div className="flex-1 min-w-0 flex flex-col">
         <Topbar onToggleSidebar={onToggleSidebar} onNav={onNav} onLogout={onLogout} />

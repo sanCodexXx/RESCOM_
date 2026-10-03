@@ -72,9 +72,10 @@ router.post('/register', async (req, res) => {
 
 // ---------------------------------------------------------------------
 // Forgot password — 3-step PIN flow, delivered by email or SMS.
-//   1) POST /forgot-password/request  { identifier, channel: 'email'|'sms' }
-//   2) POST /forgot-password/verify   { identifier, pin }
-//   3) POST /forgot-password/reset    { identifier, pin, new_password }
+//   1) POST /forgot-password/request  { identifier | phone, channel: 'email'|'sms' }
+//   2) POST /forgot-password/verify   { identifier | phone, pin }
+//   3) POST /forgot-password/reset    { identifier | phone, pin, new_password }
+//   (identifier = username or email; phone = the mobile number saved on the account)
 // The response never reveals whether an account exists.
 // ---------------------------------------------------------------------
 
@@ -82,14 +83,40 @@ function genPin() {
   return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
 }
 
+// Compare phone numbers by their last 10 digits, so 09171234567,
+// +63 917 123 4567 and 9171234567 all match the same account.
+function phoneKey(p) {
+  return String(p || '').replace(/\D/g, '').slice(-10);
+}
+
+// A reset can be started with an email/username OR a registered mobile number.
+// Steps 2 and 3 must use the same one, so every route resolves the user here.
+async function findResetUser({ identifier, phone }) {
+  if (phone) {
+    const key = phoneKey(phone);
+    if (key.length < 10) return null;
+    const { rows } = await db.query(
+      `SELECT * FROM USERS
+       WHERE phone IS NOT NULL AND RIGHT(regexp_replace(phone, '\\D', '', 'g'), 10) = $1
+       LIMIT 2`,
+      [key]
+    );
+    // If two accounts share one number we can't tell whose reset it is: send nothing.
+    return rows.length === 1 ? rows[0] : null;
+  }
+  if (!identifier) return null;
+  const { rows } = await db.query('SELECT * FROM USERS WHERE username = $1 OR email = $1', [identifier]);
+  return rows[0] || null;
+}
+
 router.post('/forgot-password/request', async (req, res) => {
-  const { identifier, channel } = req.body;
-  if (!identifier) return res.status(400).json({ error: 'Username or email is required' });
+  const { identifier, phone, channel } = req.body;
+  if (!identifier && !phone) return res.status(400).json({ error: 'Enter your email, username or mobile number' });
   if (!['email', 'sms'].includes(channel)) return res.status(400).json({ error: 'Choose email or SMS' });
+  if (phone && phoneKey(phone).length < 10) return res.status(400).json({ error: 'Enter a valid mobile number' });
 
   try {
-    const { rows } = await db.query('SELECT * FROM USERS WHERE username = $1 OR email = $1', [identifier]);
-    const user = rows[0];
+    const user = await findResetUser({ identifier, phone });
     let devPin = null; // only ever set when nothing was actually delivered
 
     if (user) {
@@ -120,7 +147,7 @@ router.post('/forgot-password/request', async (req, res) => {
       ok: true,
       message: devPin
         ? `Email/SMS isn't configured yet, so here's your PIN for testing: ${devPin}`
-        : `If an account matches, a PIN was sent via ${channel}.`,
+        : `If an account matches, a PIN was sent via ${channel === 'sms' ? 'SMS' : 'email'}.`,
       dev_pin: devPin || undefined
     });
   } catch (err) {
@@ -130,10 +157,10 @@ router.post('/forgot-password/request', async (req, res) => {
 });
 
 router.post('/forgot-password/verify', async (req, res) => {
-  const { identifier, pin } = req.body;
-  if (!identifier || !pin) return res.status(400).json({ error: 'PIN is required' });
+  const { identifier, phone, pin } = req.body;
+  if ((!identifier && !phone) || !pin) return res.status(400).json({ error: 'PIN is required' });
   try {
-    const { rows: [user] } = await db.query('SELECT * FROM USERS WHERE username = $1 OR email = $1', [identifier]);
+    const user = await findResetUser({ identifier, phone });
     if (!user) return res.status(400).json({ error: 'Invalid or expired PIN' });
 
     const { rows: [reset] } = await db.query(
@@ -156,11 +183,11 @@ router.post('/forgot-password/verify', async (req, res) => {
 });
 
 router.post('/forgot-password/reset', async (req, res) => {
-  const { identifier, pin, new_password } = req.body;
-  if (!identifier || !pin || !new_password) return res.status(400).json({ error: 'All fields are required' });
+  const { identifier, phone, pin, new_password } = req.body;
+  if ((!identifier && !phone) || !pin || !new_password) return res.status(400).json({ error: 'All fields are required' });
   if (new_password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
   try {
-    const { rows: [user] } = await db.query('SELECT * FROM USERS WHERE username = $1 OR email = $1', [identifier]);
+    const user = await findResetUser({ identifier, phone });
     if (!user) return res.status(400).json({ error: 'Invalid or expired PIN' });
 
     const { rows: [reset] } = await db.query(
