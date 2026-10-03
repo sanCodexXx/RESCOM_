@@ -67,7 +67,7 @@ export default function Dashboard({ onNav }) {
       <PageHeader
         title="Dashboard"
         subtitle="Overview of evacuation status across San Nicolas"
-        actions={<Button variant="ghost" onClick={load}><RefreshCw size={14} />Refresh</Button>}
+       
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">

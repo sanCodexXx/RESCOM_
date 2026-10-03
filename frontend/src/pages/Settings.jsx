@@ -55,11 +55,7 @@ export default function Settings() {
           </div>
         </div>
 
-        <div className="glass rounded-glass shadow-glass-sm p-6">
-          <b className="text-navy-900 text-[14px] block mb-1.5">Session</b>
-          <p className="text-navy-900/50 text-[12px] mb-4">Sign out of RESCOM on this device.</p>
-          <Button variant="danger" onClick={logout}>Log Out</Button>
-        </div>
+        
       </div>
     </>
   );
