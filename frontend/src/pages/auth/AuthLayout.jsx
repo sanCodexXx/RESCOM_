@@ -6,33 +6,28 @@ import ambulance from '../../assets/ambulance2buddies.png';
 
 export const Logo = ({ size = 56 }) => <img src={logo} alt="San Nicolas MDRRMC" style={{ width: size, height: size }} className="object-contain" />;
 
-/* Login: full-bleed photo, message on the left, form card on the right. */
 export function LoginLayout({ children }) {
   return (
     <div className="min-h-screen relative bg-navy-900 overflow-hidden flex">
       <img src={bg} alt="" className="absolute inset-0 w-full h-full object-cover" />
       <div className="absolute inset-0 bg-gradient-to-r from-[#0a1450]/90 via-[#0a1450]/70 to-[#0a1450]/45" />
-      {/* The three responders: sized from the viewport height so their heads rise up to the
-          tagline, capped by width so they never run under the login card. Sits behind the text. */}
       <img
         src={medicsHero}
         alt=""
         aria-hidden="true"
-        className="hidden lg:block absolute left-0 bottom-0 z-[5] pointer-events-none select-none object-contain object-left-bottom drop-shadow-2xl"
-        style={{ height: 'max(260px, calc(100vh - 260px))', maxWidth: '66vw', width: 'auto', marginLeft: '-2vw' }}
+        className="hidden lg:block absolute z-[5] pointer-events-none select-none object-contain object-left-bottom drop-shadow-2xl"
+        style={{ '--h': 'min(max(300px, calc(100vh - 190px)), 44vw)', height: 'var(--h)', width: 'auto', left: 'calc(var(--h) * -0.13)', bottom: 'calc(var(--h) * -0.18)' }}
       />
-      {/* Brand pinned to the left edge of the page, with a smaller logo */}
-      <div className="hidden lg:flex absolute top-8 left-8 items-center gap-2.5 z-20">
-        <Logo size={50} />
-        <div><b className="text-white text-[20px] block leading-tight">MDRRMO</b><span className="text-white/70 text-[12px]">San Nicolas, Ilocos Norte</span></div>
+      <div className="hidden lg:flex flex-col absolute top-10 left-8 xl:left-12 z-20">
+        <div className="flex items-center gap-3">
+          <Logo size={64} />
+          <div><b className="text-white text-[22px] block leading-tight">MDRRMO</b><span className="text-white/70 text-[13px]">San Nicolas, Ilocos Norte</span></div>
+        </div>
+        <h2 className="text-white text-[44px] font-bold leading-[1.1] mt-14 max-w-[420px]">Together for a Safer Community</h2>
+        <p className="text-white/75 text-[16px] mt-4 max-w-[340px]">Monitoring, reporting, and responding to emergencies effectively.</p>
       </div>
       <div className="relative z-10 w-full min-w-0 max-w-[1280px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 px-4 sm:px-10">
-        <div className="hidden lg:flex flex-col py-10">
-          {/* Spacer keeps the headline in the same spot as before */}
-          <div className="h-[64px]" />
-          <h2 className="text-white text-[44px] font-bold leading-[1.1] mt-14 max-w-[420px]">Together for a Safer Community</h2>
-          <p className="text-white/75 text-[16px] mt-4 max-w-[340px]">Monitoring, reporting, and responding to emergencies effectively.</p>
-        </div>
+        <div className="hidden lg:block" />
         <div className="min-w-0 flex flex-col items-center justify-center py-8 sm:py-10">
           <div className="lg:hidden flex items-center justify-center gap-3 mb-6 max-w-full"><Logo size={52} /><b className="text-white text-lg leading-tight">MDRRMO San Nicolas</b></div>
           {children}
@@ -43,7 +38,6 @@ export function LoginLayout({ children }) {
   );
 }
 
-/* Register: photo panel with form card on the left, info + ambulance on the right. */
 export function RegisterLayout({ children }) {
   const items = [['Create Account', 'Sign up to access the system and its features.'], ['Stay Informed', 'Receive real-time updates and alerts.'], ['Report Easily', 'Submit reports and monitor evacuation activities.']];
   return (
@@ -72,8 +66,6 @@ export function RegisterLayout({ children }) {
   );
 }
 
-/* Forgot Password: plain light page, single white card, illustration +
-   copy on the left, the active step's form on the right. */
 export function ForgotLayout({ children }) {
   return (
     <div className="min-h-screen bg-[#f4f5f7] flex items-center justify-center p-4 sm:p-6">
