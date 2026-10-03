@@ -1,7 +1,7 @@
 import React from 'react';
 import logo from '../../assets/SanNicolasLogo.png';
 import bg from '../../assets/medicfullbg.png';
-import medicsHero from '../../assets/medics-hero.webp';
+import medicsHero from '../../assets/medicnobg.png';
 import ambulance from '../../assets/ambulance2buddies.png';
 
 export const Logo = ({ size = 56 }) => <img src={logo} alt="San Nicolas MDRRMC" style={{ width: size, height: size }} className="object-contain" />;
