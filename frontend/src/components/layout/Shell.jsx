@@ -8,7 +8,7 @@ export default function Shell({ route, sidebarOpen, onToggleSidebar, onNav, onLo
       {sidebarOpen && <div className="md:hidden fixed inset-0 bg-black/45 z-30" onClick={onToggleSidebar} />}
       <Sidebar open={sidebarOpen} route={route} onNav={onNav} onLogout={onLogout} role={role} />
       <div className={`flex-1 min-w-0 flex flex-col min-h-screen transition-[margin-left] duration-200 ${sidebarOpen ? 'md:ml-[240px]' : 'md:ml-0'}`}>
-        <Topbar onToggleSidebar={onToggleSidebar} onNav={onNav} onLogout={onLogout} />
+        <Topbar onToggleSidebar={onToggleSidebar} />
         <div className="p-4 sm:p-6 flex-1">{children}</div>
       </div>
     </div>

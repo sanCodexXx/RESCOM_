@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Menu, Bell, ChevronDown, Settings, LogOut, MoreVertical, Check, CheckCheck, Trash2, Eye, X } from 'lucide-react';
+import { Menu, Bell, MoreVertical, Check, CheckCheck, Trash2, Eye, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { useUi } from '../../context/UiContext.jsx';
 import { api } from '../../lib/api.js';
 import { getSocket } from '../../lib/socket.js';
 
@@ -41,10 +40,9 @@ function NotifRow({ n, onRead, onUnread, onDelete, onView }) {
   );
 }
 
-export default function Topbar({ onToggleSidebar, onNav, onLogout }) {
+export default function Topbar({ onToggleSidebar }) {
   const { user } = useAuth();
   const [openNotif, setOpenNotif] = useState(false);
-  const [openMenu, setOpenMenu] = useState(false);
   const [openFull, setOpenFull] = useState(false);
   const [notifs, setNotifs] = useState([]);
   const [viewing, setViewing] = useState(null);
@@ -63,7 +61,7 @@ export default function Topbar({ onToggleSidebar, onNav, onLogout }) {
   }, [load]);
 
   useEffect(() => {
-    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) { setOpenNotif(false); setOpenMenu(false); } }
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpenNotif(false); }
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
@@ -109,26 +107,15 @@ export default function Topbar({ onToggleSidebar, onNav, onLogout }) {
         )}
       </div>
 
-      <div className="relative">
-        <button onClick={() => setOpenMenu(v => !v)} className="flex items-center gap-2 hover:bg-navy-900/8 rounded-xl px-2 py-1">
-          <div className="w-[34px] h-[34px] rounded-full bg-gradient-to-br from-accent-500 to-accent-700 text-white grid place-items-center text-[12px] font-bold shrink-0 border border-white/20">
-            {initials}
-          </div>
-          <div className="hidden sm:block text-left leading-tight">
-            <b className="block text-[12.5px] text-navy-900">{user?.first_name} {user?.last_name}</b>
-            <span className="text-[10.5px] text-navy-900/50">{user?.role === 'ADMIN_STAFF' ? 'Admin Staff' : 'Field Personnel'}</span>
-          </div>
-          <ChevronDown size={14} className="text-navy-900/45" />
-        </button>
-        {openMenu && (
-          <div className="absolute top-11 right-0 glass-strong rounded-2xl shadow-glass w-[200px] overflow-hidden z-40">
-            {[{ label: 'Settings', icon: Settings, fn: () => onNav('settings') }, { label: 'Log out', icon: LogOut, fn: onLogout }].map((m, i) => (
-              <div key={i} className="px-4 py-3 flex items-center gap-2.5 text-[12.5px] cursor-pointer hover:bg-navy-900/6 text-navy-900" onClick={() => { setOpenMenu(false); m.fn(); }}>
-                <m.icon size={15} /> <b className="font-medium">{m.label}</b>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Profile (display only, no dropdown) */}
+      <div className="flex items-center gap-2 px-2 py-1">
+        <div className="w-[34px] h-[34px] rounded-full bg-gradient-to-br from-accent-500 to-accent-700 text-white grid place-items-center text-[12px] font-bold shrink-0 border border-white/20">
+          {initials}
+        </div>
+        <div className="hidden sm:block text-left leading-tight">
+          <b className="block text-[12.5px] text-navy-900">{user?.first_name} {user?.last_name}</b>
+          <span className="text-[10.5px] text-navy-900/50">{user?.role === 'ADMIN_STAFF' ? 'Admin Staff' : 'Field Personnel'}</span>
+        </div>
       </div>
 
       {/* Full notifications view */}
