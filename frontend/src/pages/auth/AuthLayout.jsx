@@ -21,12 +21,15 @@ export function LoginLayout({ children }) {
         className="hidden lg:block absolute left-0 bottom-0 z-[5] pointer-events-none select-none object-contain object-left-bottom drop-shadow-2xl"
         style={{ height: 'max(260px, calc(100vh - 260px))', maxWidth: '66vw', width: 'auto', marginLeft: '-2vw' }}
       />
+      {/* Brand pinned to the left edge of the page, with a smaller logo */}
+      <div className="hidden lg:flex absolute top-8 left-8 items-center gap-2.5 z-20">
+        <Logo size={50} />
+        <div><b className="text-white text-[20px] block leading-tight">MDRRMO</b><span className="text-white/70 text-[12px]">San Nicolas, Ilocos Norte</span></div>
+      </div>
       <div className="relative z-10 w-full min-w-0 max-w-[1280px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 px-4 sm:px-10">
         <div className="hidden lg:flex flex-col py-10">
-          <div className="flex items-center gap-3">
-            <Logo size={64} />
-            <div><b className="text-white text-[22px] block leading-tight">MDRRMO</b><span className="text-white/70 text-[13px]">San Nicolas, Ilocos Norte</span></div>
-          </div>
+          {/* Spacer keeps the headline in the same spot as before */}
+          <div className="h-[64px]" />
           <h2 className="text-white text-[44px] font-bold leading-[1.1] mt-14 max-w-[420px]">Together for a Safer Community</h2>
           <p className="text-white/75 text-[16px] mt-4 max-w-[340px]">Monitoring, reporting, and responding to emergencies effectively.</p>
         </div>
