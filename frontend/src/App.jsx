@@ -42,6 +42,14 @@ export default function App() {
   const [ctx, setCtx] = useState({});
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
 
+  // Open the sidebar when the window grows to desktop width, close it when it shrinks to mobile.
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const onChange = (e) => setSidebarOpen(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
   useEffect(() => {
     const t = setTimeout(() => setShowSplash(false), 1600);
     return () => clearTimeout(t);

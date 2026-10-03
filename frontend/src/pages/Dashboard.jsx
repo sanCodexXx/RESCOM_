@@ -49,7 +49,7 @@ export default function Dashboard({ onNav }) {
   const activeIncidents = incidents.filter(i => i.reporting_status !== 'Resolved').length;
 
   const occupancyChart = centers.map(c => ({
-    name: c.center_name.length > 14 ? c.center_name.slice(0, 14) + '…' : c.center_name,
+    name: c.center_name.length > 20 ? c.center_name.slice(0, 20) + '…' : c.center_name,
     Occupied: c.occupancy,
     Available: Math.max(0, c.capacity - c.occupancy)
   }));
@@ -84,9 +84,9 @@ export default function Dashboard({ onNav }) {
           <h3 className="font-bold text-[15px] text-navy-900 mb-3.5">Center Occupancy vs Capacity</h3>
           {occupancyChart.length > 0 ? (
             <ResponsiveContainer width="100%" height={230}>
-              <BarChart data={occupancyChart} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
+              <BarChart data={occupancyChart} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e9f2" />
-                <XAxis dataKey="name" tick={{ fontSize: 10.5, fill: '#0B1A47AA' }} interval={0} angle={-18} textAnchor="end" height={50} />
+                <XAxis dataKey="name" tick={{ fontSize: 10.5, fill: '#0B1A47AA' }} interval={0} angle={-18} textAnchor="end" height={64} />
                 <YAxis tick={{ fontSize: 10.5, fill: '#0B1A47AA' }} allowDecimals={false} />
                 <Tooltip contentStyle={{ borderRadius: 10, fontSize: 12, border: '1px solid #e1e8f5' }} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
