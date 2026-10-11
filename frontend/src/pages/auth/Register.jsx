@@ -71,9 +71,7 @@ export default function Register({ goto }) {
         <h1 className="text-[28px] font-extrabold text-[#0a1490] text-center">Create Your Account</h1>
         <p className="text-center text-navy-900/70 text-[14px] mb-6">Sign up to get started</p>
         <form onSubmit={submit}>
-          <p className="text-[12px] text-navy-900/60 mb-3.5 leading-snug">
-            New accounts are created as Field Personnel. An MDRRMO administrator can upgrade your role later.
-          </p>
+          
           <Field className="mb-3"><Ctrl icon={<User size={16} />}><TextInput placeholder="Full Name" value={f.full} onChange={set('full')} /></Ctrl></Field>
           <Field className="mb-3"><Ctrl icon={<Mail size={16} />}><TextInput type="email" placeholder="Email Address" value={f.email} onChange={set('email')} /></Ctrl></Field>
           <Field className="mb-3"><Ctrl icon={<AtSign size={16} />}><TextInput placeholder="Username" value={f.username} onChange={set('username')} autoComplete="username" /></Ctrl></Field>

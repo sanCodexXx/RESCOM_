@@ -31,14 +31,27 @@ function publicUser(u) {
 //    promote admins (Users page).
 //  - Set ALLOW_PUBLIC_REGISTRATION=false to close self-registration
 //    completely; admins then create accounts from the Users page.
+function normalizePhPhone(raw) {
+  const d = String(raw || '').replace(/[\s\-().]/g, '');
+  const m = d.match(/^(?:\+63|63|0)(9\d{9})$/);
+  return m ? `+63${m[1]}` : null;
+}
+
 router.post('/register', async (req, res) => {
   try {
-    const { first_name, last_name, username, email, password, unit, phone } = req.body;
+    const { first_name, last_name, username, email, password, unit, phone, role, admin_code } = req.body;
     if (!first_name || !last_name || !username || !email || !password) {
       return res.status(400).json({ error: 'All fields are required' });
     }
     if (String(password).length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+    let cleanPhone = null;
+    if (phone && String(phone).trim()) {
+      cleanPhone = normalizePhPhone(phone);
+      if (!cleanPhone) {
+        return res.status(400).json({ error: 'Enter a valid Philippine mobile number, e.g. +63 917 123 4567' });
+      }
     }
 
     const { rows: [{ count }] } = await db.query('SELECT COUNT(*)::int AS count FROM USERS');
@@ -46,7 +59,21 @@ router.post('/register', async (req, res) => {
     if (!isFirstUser && process.env.ALLOW_PUBLIC_REGISTRATION === 'false') {
       return res.status(403).json({ error: 'Sign-up is closed. Ask an MDRRMO administrator to create your account.' });
     }
-    const safeRole = isFirstUser ? 'ADMIN_STAFF' : 'FIELD_PERSONNEL';
+    let safeRole = isFirstUser ? 'ADMIN_STAFF' : 'FIELD_PERSONNEL';
+    // Anyone can ask for Admin Staff on the sign-up screen, but it is only
+    // granted with the secret code the MDRRMO sets in ADMIN_SIGNUP_CODE.
+    if (!isFirstUser && role === 'ADMIN_STAFF') {
+      const expected = process.env.ADMIN_SIGNUP_CODE;
+      if (!expected) {
+        return res.status(403).json({ error: 'Admin sign-up is not enabled. Register as Field Personnel, or ask an administrator to promote you.' });
+      }
+      const a = crypto.createHash('sha256').update(String(admin_code || '')).digest();
+      const b = crypto.createHash('sha256').update(expected).digest();
+      if (!crypto.timingSafeEqual(a, b)) {
+        return res.status(403).json({ error: 'Invalid admin registration code' });
+      }
+      safeRole = 'ADMIN_STAFF';
+    }
 
     const exists = await db.query(
       'SELECT 1 FROM USERS WHERE username = $1 OR email = $2', [username, email]
@@ -60,7 +87,7 @@ router.post('/register', async (req, res) => {
       `INSERT INTO USERS (first_name, last_name, username, email, password_hash, role, unit, phone)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        RETURNING user_id, first_name, last_name, username, email, role, unit, phone, created_at`,
-      [first_name, last_name, username, email, hash, safeRole, unit || (safeRole === 'ADMIN_STAFF' ? 'Command Headquarters' : 'Responder Team'), phone || null]
+      [first_name, last_name, username, email, hash, safeRole, unit || (safeRole === 'ADMIN_STAFF' ? 'Command Headquarters' : 'Responder Team'), cleanPhone]
     );
 
     res.status(201).json({ user, token: sign(user) });

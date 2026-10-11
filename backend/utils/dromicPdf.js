@@ -1,355 +1,191 @@
-// Builds the printable A4 DROMIC report.
-//
-// Layout is done with explicit coordinates (no `continued` text tricks) so
-// columns can never run off the page or overlap. Every block measures itself
-// first and moves to a new page if it would not fit.
-//
-// Logos live in backend/assets/:
-//   san-nicolas-logo.png   MDRRMC seal  -> left of the header   (included)
-//   municipal-seal.png     optional     -> right of the header  (drop the file in and it appears)
+// Builds the printable A4 DROMIC report, laid out like the DSWD DROMIC reports:
+//   "DROMIC Report #N on <disaster> as of <date, time>"
+//   I.   Situation Overview
+//   II.  Status of Affected Areas and Population            (Table 1)
+//   III. Status of Displaced Population - inside / outside  (Table 2)
+//   IV.  Profile of Displaced Population                    (Table 3)
+// Figures come from the snapshot taken when the report was generated.
 const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
 
-const ASSETS = path.join(__dirname, '..', 'assets');
-const LOGO_LEFT = path.join(ASSETS, 'san-nicolas-logo.png');
-const LOGO_RIGHT = path.join(ASSETS, 'municipal-seal.png');
+const LOGO = path.join(__dirname, '..', 'assets', 'san-nicolas-logo.png');
+const C = { navy: '#0B1A47', accent: '#1F5FBF', text: '#1f2937', muted: '#6b7280', line: '#d9e1ef', soft: '#f3f6fc', white: '#ffffff', ok: '#127A45', okBg: '#e3f5ec', blue: '#1F5FBF', blueBg: '#e3edfb', warn: '#9a6700' };
+const PAGE = { w: 595.28, h: 841.89, m: 42 };
+const W = PAGE.w - PAGE.m * 2;
+const BOTTOM = PAGE.h - 64;
 
-const C = {
-  navy: '#0B1A47', blue: '#0a1490', accent: '#1F5FBF',
-  text: '#1f2937', muted: '#6b7280', line: '#d9e1ef', soft: '#f3f6fc',
-  white: '#ffffff', ok: '#127A45', okBg: '#e3f5ec', warn: '#9a6700', warnBg: '#fdf3d7',
-  bad: '#b42318', badBg: '#fde8e6', grey: '#4b5563', greyBg: '#eceff4', accentBg: '#e3edfb'
-};
-const STATUS_COLORS = {
-  Draft: [C.grey, C.greyBg], Active: [C.accent, C.accentBg], Finalized: [C.ok, C.okBg],
-  Open: [C.ok, C.okBg], Full: [C.bad, C.badBg], Standby: [C.grey, C.greyBg], Closed: [C.grey, C.greyBg]
-};
-
-const PAGE = { w: 595.28, h: 841.89, m: 40 };
-const W = PAGE.w - PAGE.m * 2;          // usable width
-const BOTTOM = PAGE.h - 62;             // lowest y content may reach (footer lives below)
-const RUN_TOP = PAGE.m + 46;            // where content starts on continuation pages
-
-// Server may run in UTC; reports are for the Philippines.
-function fmt(d) {
-  if (!d) return '—';
-  const dt = new Date(d);
-  if (isNaN(dt)) return '—';
-  return dt.toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
-}
+const TZ = 'Asia/Manila';
+const dateLong = d => new Date(d).toLocaleDateString('en-GB', { timeZone: TZ, day: '2-digit', month: 'long', year: 'numeric' });
+const timeShort = d => new Date(d).toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' });
+const dateTime = d => (d ? `${dateLong(d)}, ${timeShort(d)}` : '—');
+const n = v => Number(v || 0).toLocaleString('en-US');
+const plural = (c, one, many) => `${n(c)} ${c === 1 ? one : many}`;
+const STATUS_LABEL = { Draft: 'DRAFT', Active: 'ON-GOING', Finalized: 'FINAL REPORT' };
+const INCIDENT_LABEL = { Pending: 'Pending response', 'En Route': 'Responders en route', Active: 'Active (on-going)', Resolved: 'Resolved' };
 
 function buildDromicPdf(data, out) {
-  const { report, centers, totals, priorityBreakdown } = data;
-  const reportNo = `#${report.report_id}`;
+  const { report, totals = {}, byOrigin = [], centers = [], profile = {} } = data;
+  const t = { families_cum: 0, persons_cum: 0, families_now: 0, persons_now: 0, centers_cum: 0, centers_now: 0, barangays_affected: 0, ...totals };
+  const reportNo = report.report_no || report.report_id;
+  const asOf = report.as_of || report.report_date;
   const author = `${report.author_first || ''} ${report.author_last || ''}`.trim() || '—';
+  const name = report.disaster_name || 'the disaster';
 
   const doc = new PDFDocument({
     size: 'A4', margin: PAGE.m, bufferPages: true,
-    info: {
-      Title: `DROMIC Report ${reportNo} — ${report.disaster_name || ''}`.trim(),
-      Author: 'MDRRMO San Nicolas, Ilocos Norte', Subject: 'DROMIC Report', Creator: 'RESCOM'
-    }
+    info: { Title: `DROMIC Report #${reportNo} on ${name} as of ${dateTime(asOf)}`, Author: 'MDRRMO San Nicolas, Ilocos Norte', Subject: 'DROMIC Report', Creator: 'RESCOM' }
   });
   doc.pipe(out);
-
-  const hasLeft = fs.existsSync(LOGO_LEFT);
-  const hasRight = fs.existsSync(LOGO_RIGHT);
   let y = PAGE.m;
 
-  // ---------- small helpers ----------
-  // Single-line text: anything wider than its box is shortened with an ellipsis instead of spilling out.
-  const ellipsize = (str, width) => {
-    if (!width || doc.widthOfString(str) <= width) return str;
-    let s = str;
-    while (s.length > 1 && doc.widthOfString(s + '…') > width) s = s.slice(0, -1);
-    return s.trimEnd() + '…';
-  };
-  const text = (str, x, yy, opts = {}) => doc.text(ellipsize(String(str ?? '—'), opts.width), x, yy, { lineBreak: false, ...opts });
-  const h = (str, width, font, size) => { doc.font(font).fontSize(size); return doc.heightOfString(String(str ?? '—'), { width }); };
+  const ensure = h => { if (y + h > BOTTOM) { doc.addPage(); y = PAGE.m; } };
+  const textH = (s, size, width, font = 'Helvetica') => { doc.font(font).fontSize(size); return doc.heightOfString(String(s), { width }); };
 
-  function image(file, x, yy, size) {
-    try { doc.image(file, x, yy, { fit: [size, size], align: 'center', valign: 'center' }); } catch (_) { /* never fail the report over a logo */ }
-  }
+  // ---------- header ----------
+  if (fs.existsSync(LOGO)) { try { doc.image(LOGO, PAGE.m, y, { fit: [54, 54] }); } catch (_) { /* never fail over a logo */ } }
+  const hx = PAGE.m + 66;
+  doc.font('Helvetica').fontSize(8.5).fillColor(C.muted).text('Republic of the Philippines', hx, y + 2, { lineBreak: false });
+  doc.text('Province of Ilocos Norte  ·  Municipality of San Nicolas', hx, y + 13, { lineBreak: false });
+  doc.font('Helvetica-Bold').fontSize(10.5).fillColor(C.navy).text('MUNICIPAL DISASTER RISK REDUCTION AND MANAGEMENT OFFICE', hx, y + 27, { lineBreak: false });
+  doc.font('Helvetica').fontSize(8.5).fillColor(C.muted).text('Disaster Response Operations Monitoring and Information Center (DROMIC)', hx, y + 41, { lineBreak: false });
+  y += 62;
+  doc.moveTo(PAGE.m, y).lineTo(PAGE.m + W, y).lineWidth(1.5).strokeColor(C.navy).stroke();
+  y += 14;
 
-  function chip(label, x, yy, align = 'left') {
-    const [fg, bg] = STATUS_COLORS[label] || [C.grey, C.greyBg];
-    doc.font('Helvetica-Bold').fontSize(8);
-    const w = doc.widthOfString(label) + 18;
-    const left = align === 'center' ? x - w / 2 : x;
-    doc.roundedRect(left, yy, w, 16, 8).fill(bg);
-    doc.fillColor(fg); text(label, left, yy + 4.5, { width: w, align: 'center' });
-    return w;
-  }
+  // ---------- title ----------
+  const label = STATUS_LABEL[report.reporting_status] || String(report.reporting_status || '').toUpperCase();
+  const chipW = doc.font('Helvetica-Bold').fontSize(8.5).widthOfString(label) + 18;
+  const finalRep = report.reporting_status === 'Finalized';
+  doc.roundedRect(PAGE.m + W - chipW, y + 2, chipW, 18, 9).fill(finalRep ? C.okBg : C.blueBg);
+  doc.font('Helvetica-Bold').fontSize(8.5).fillColor(finalRep ? C.ok : C.blue).text(label, PAGE.m + W - chipW, y + 7, { width: chipW, align: 'center', lineBreak: false });
+  const titleW = W - chipW - 12;
+  doc.font('Helvetica-Bold').fontSize(15).fillColor(C.navy);
+  const title = `MDRRMO DROMIC Report #${reportNo} on ${name}`;
+  const th = doc.heightOfString(title, { width: titleW });
+  doc.text(title, PAGE.m, y, { width: titleW });
+  y += th + 3;
+  doc.font('Helvetica').fontSize(10.5).fillColor(C.text).text(`as of ${dateTime(asOf)}`, PAGE.m, y, { lineBreak: false });
+  y += 24;
 
-  // ---------- header (page 1) ----------
-  function firstHeader() {
-    const logo = 74, gap = 14, top = y;
-    if (hasLeft) image(LOGO_LEFT, PAGE.m, top, logo);
-    if (hasRight) image(LOGO_RIGHT, PAGE.m + W - logo, top, logo);
-
-    // Text is centred in the space between the two logo slots (equal slots keep it truly centred).
-    const cx = PAGE.m + logo + gap, cw = W - (logo + gap) * 2;
-    const lines = [
-      ['Republic of the Philippines', 'Helvetica', 9, C.muted],
-      ['Province of Ilocos Norte', 'Helvetica', 9, C.muted],
-      ['Municipality of San Nicolas', 'Helvetica-Bold', 12, C.navy],
-      ['Municipal Disaster Risk Reduction and Management Office', 'Helvetica', 9, C.text]
-    ];
-    const total = lines.reduce((s, l) => s + h(l[0], cw, l[1], l[2]) + 2.5, 0);
-    let ty = top + Math.max(0, (logo - total) / 2);
-    lines.forEach(([t, f, s, col]) => {
-      doc.font(f).fontSize(s).fillColor(col);
-      doc.text(t, cx, ty, { width: cw, align: 'center', lineBreak: false });
-      ty += h(t, cw, f, s) + 2.5;
-    });
-
-    y = top + logo + 10;
-    doc.moveTo(PAGE.m, y).lineTo(PAGE.m + W, y).lineWidth(2).strokeColor(C.navy).stroke();
-    doc.moveTo(PAGE.m, y + 3.5).lineTo(PAGE.m + W, y + 3.5).lineWidth(0.6).strokeColor(C.accent).stroke();
-    y += 20;
-
-    doc.font('Helvetica-Bold').fontSize(20).fillColor(C.navy);
-    text('DROMIC REPORT', PAGE.m, y, { width: W, align: 'center' });
-    y += 26;
-    doc.font('Helvetica').fontSize(9.5).fillColor(C.muted);
-    text('Disaster Response Operations Monitoring and Information Center', PAGE.m, y, { width: W, align: 'center' });
-    y += 20;
-    chip(report.reporting_status, PAGE.m + W / 2, y, 'center');
-    y += 32;
-  }
-
-  // ---------- header (continuation pages) ----------
-  function runningHeader() {
-    if (hasLeft) image(LOGO_LEFT, PAGE.m, PAGE.m - 4, 30);
-    const tx = PAGE.m + (hasLeft ? 38 : 0);
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(C.navy);
-    text('DROMIC REPORT', tx, PAGE.m + 1);
-    doc.font('Helvetica').fontSize(8.5).fillColor(C.muted);
-    text(`${report.disaster_name || ''}${report.brgy ? ' — ' + report.brgy : ''}`, tx, PAGE.m + 15, { width: W - 150 - (tx - PAGE.m) });
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(C.navy);
-    text(`Report ${reportNo}`, PAGE.m + W - 140, PAGE.m + 6, { width: 140, align: 'right' });
-    doc.moveTo(PAGE.m, PAGE.m + 34).lineTo(PAGE.m + W, PAGE.m + 34).lineWidth(1).strokeColor(C.line).stroke();
-  }
-
-  function newPage() { doc.addPage(); runningHeader(); y = RUN_TOP; }
-  function ensure(height) { if (y + height > BOTTOM) { newPage(); return true; } return false; }
-
-  function section(title, keepWith = 60) {
-    ensure(34 + keepWith);
+  // ---------- building blocks ----------
+  const section = s => {
+    ensure(40);
     doc.rect(PAGE.m, y + 1, 4, 14).fill(C.accent);
-    doc.font('Helvetica-Bold').fontSize(12).fillColor(C.navy);
-    text(title, PAGE.m + 12, y + 1.5);
+    doc.font('Helvetica-Bold').fontSize(11.5).fillColor(C.navy).text(s, PAGE.m + 12, y, { lineBreak: false });
     y += 24;
-  }
+  };
+  const sub = s => { ensure(26); doc.font('Helvetica-Bold').fontSize(10).fillColor(C.text).text(s, PAGE.m, y, { lineBreak: false }); y += 17; };
+  const para = (s, o = {}) => {
+    const size = o.size || 9.8, font = o.bold ? 'Helvetica-Bold' : 'Helvetica';
+    const h = textH(s, size, W, font);
+    ensure(h + 4);
+    doc.font(font).fontSize(size).fillColor(o.color || C.text).text(s, PAGE.m, y, { width: W, lineGap: 2 });
+    y += h + (o.after ?? 8);
+  };
+  const caption = s => { ensure(18); doc.font('Helvetica-Bold').fontSize(9).fillColor(C.muted).text(s, PAGE.m, y, { lineBreak: false }); y += 14; };
 
-  // ---------- report / incident details panel ----------
-  function detailsPanel() {
-    const colW = (W - 16) / 2, pad = 12, labelW = 74, valW = colW - pad * 2 - labelW;
-    const left = [
-      ['Report No.', reportNo], ['Status', report.reporting_status],
-      ['Generated', fmt(report.report_date)], ['Generated By', author]
-    ];
-    const right = [
-      ['Disaster', report.disaster_name], ['Type', report.disaster_type], ['Barangay', report.brgy],
-      ['Severity', report.severity], ['Date Started', fmt(report.date_started)]
-    ];
-    const rowH = r => Math.max(h(r[0], labelW, 'Helvetica', 8.5), h(r[1], valW, 'Helvetica-Bold', 9.5)) + 7;
-    const colH = rows => 24 + rows.reduce((s, r) => s + rowH(r), 0) + 6;
-    const boxH = Math.max(colH(left), colH(right));
-    ensure(boxH + 12);
-
-    const draw = (x, title, rows) => {
-      doc.roundedRect(x, y, colW, boxH, 6).lineWidth(0.8).fillAndStroke(C.soft, C.line);
-      doc.font('Helvetica-Bold').fontSize(8).fillColor(C.accent);
-      text(title, x + pad, y + 10);
-      let ry = y + 26;
-      rows.forEach(r => {
-        doc.font('Helvetica').fontSize(8.5).fillColor(C.muted);
-        doc.text(r[0], x + pad, ry + 1, { width: labelW, lineBreak: false });
-        doc.font('Helvetica-Bold').fontSize(9.5).fillColor(C.navy);
-        doc.text(String(r[1] ?? '—'), x + pad + labelW, ry, { width: valW });
-        ry += rowH(r);
-      });
-    };
-    draw(PAGE.m, 'REPORT DETAILS', left);
-    draw(PAGE.m + colW + 16, 'INCIDENT DETAILS', right);
-    y += boxH + 22;
-  }
-
-  // ---------- summary stat cards ----------
-  function statCards() {
-    section('Summary Figures', 70);
-    const gap = 12, cw = (W - gap * 2) / 3, ch = 66;
-    ensure(ch + 10);
-    [
-      ['Total Evacuated', totals.total_evacuated], ['Currently Present', totals.currently_present],
-      ['Priority / Vulnerable', totals.priority_count]
-    ].forEach(([label, val], i) => {
-      const x = PAGE.m + i * (cw + gap);
-      doc.roundedRect(x, y, cw, ch, 6).lineWidth(0.8).fillAndStroke(C.white, C.line);
-      doc.rect(x + 1, y + 1, cw - 2, 3).fill(C.accent);
-      doc.font('Helvetica-Bold').fontSize(24).fillColor(C.navy);
-      text(val ?? 0, x, y + 16, { width: cw, align: 'center' });
-      doc.font('Helvetica').fontSize(8.5).fillColor(C.muted);
-      text(label.toUpperCase(), x, y + 48, { width: cw, align: 'center' });
-    });
-    y += ch + 22;
-  }
-
-  // ---------- priority breakdown (label + proportional bar + count) ----------
-  function priority() {
-    if (!priorityBreakdown.length) return;
-    section('Priority Case Breakdown', 40);
-    const max = Math.max(...priorityBreakdown.map(p => p.n), 1);
-    const labelW = 150, barX = PAGE.m + labelW + 8, barW = W - labelW - 8 - 40;
-    priorityBreakdown.forEach(p => {
-      ensure(22);
-      doc.font('Helvetica').fontSize(9.5).fillColor(C.text);
-      text(p.case_type, PAGE.m, y + 3, { width: labelW });
-      doc.roundedRect(barX, y + 3, barW, 10, 5).fill(C.greyBg);
-      doc.roundedRect(barX, y + 3, Math.max(10, (barW * p.n) / max), 10, 5).fill(C.accent);
-      doc.font('Helvetica-Bold').fontSize(9.5).fillColor(C.navy);
-      text(p.n, PAGE.m + W - 32, y + 3, { width: 32, align: 'right' });
-      y += 21;
-    });
-    y += 14;
-  }
-
-  // ---------- evacuation centers table ----------
-  function centersTable() {
-    section('Evacuation Centers', 70);
-    const cols = [
-      { k: 'name', t: 'CENTER', w: 205, a: 'left' }, { k: 'brgy', t: 'BARANGAY', w: 105, a: 'left' },
-      { k: 'occ', t: 'OCCUPANCY', w: 110, a: 'left' }, { k: 'status', t: 'STATUS', w: W - 420, a: 'left' }
-    ];
-    const px = 8;
-    let xs = []; cols.reduce((x, c) => { xs.push(x); return x + c.w; }, PAGE.m);
-
+  // cols: [{ label, w, align }]; rows: arrays of cell strings; opts.total: bold last row
+  function table(cols, rows, opts = {}) {
+    const pad = 6;
+    const widths = cols.map(c => c.w);
     const header = () => {
-      doc.rect(PAGE.m, y, W, 22).fill(C.navy);
-      doc.font('Helvetica-Bold').fontSize(8).fillColor(C.white);
-      cols.forEach((c, i) => text(c.t, xs[i] + px, y + 7, { width: c.w - px * 2, align: c.a }));
-      y += 22;
+      doc.font('Helvetica-Bold').fontSize(8.5);
+      const hh = Math.max(...cols.map(c => doc.heightOfString(c.label, { width: c.w - pad * 2 }))) + 12;
+      doc.rect(PAGE.m, y, W, hh).fill(C.navy);
+      let x = PAGE.m;
+      cols.forEach(c => { doc.fillColor(C.white).text(c.label, x + pad, y + 6, { width: c.w - pad * 2, align: c.align || 'left' }); x += c.w; });
+      y += hh;
     };
-
-    if (!centers.length) {
-      doc.font('Helvetica').fontSize(9.5).fillColor(C.muted); text('No evacuation centers on record.', PAGE.m, y); y += 24; return;
-    }
-    ensure(22 + 30); header();
-
-    let sumOcc = 0, sumCap = 0;
-    centers.forEach((c, idx) => {
-      sumOcc += c.occupancy || 0; sumCap += c.capacity || 0;
-      const rh = Math.max(h(c.center_name, cols[0].w - px * 2, 'Helvetica', 9.5), h(c.barangay, cols[1].w - px * 2, 'Helvetica', 9.5), 14) + 12;
-      if (ensure(rh)) header();
-      if (idx % 2 === 0) doc.rect(PAGE.m, y, W, rh).fill(C.soft);
-      doc.font('Helvetica').fontSize(9.5).fillColor(C.text);
-      doc.text(c.center_name, xs[0] + px, y + 6, { width: cols[0].w - px * 2 });
-      doc.text(c.barangay || '—', xs[1] + px, y + 6, { width: cols[1].w - px * 2 });
-      doc.font('Helvetica-Bold').fillColor(C.navy);
-      text(`${c.occupancy} / ${c.capacity}`, xs[2] + px, y + 6, { width: 56 });
-      // mini occupancy bar
-      const pct = c.capacity > 0 ? Math.min(1, c.occupancy / c.capacity) : 0;
-      doc.roundedRect(xs[2] + px + 58, y + 9, 36, 5, 2.5).fill(C.greyBg);
-      if (pct > 0) doc.roundedRect(xs[2] + px + 58, y + 9, Math.max(5, 36 * pct), 5, 2.5).fill(pct >= 1 ? C.bad : C.accent);
-      chip(c.status, xs[3] + px, y + (rh - 16) / 2);
+    ensure(60); header();
+    rows.forEach((r, idx) => {
+      const isTotal = opts.total && idx === rows.length - 1;
+      const font = isTotal ? 'Helvetica-Bold' : 'Helvetica';
+      doc.font(font).fontSize(9);
+      const rh = Math.max(...r.map((cell, i) => doc.heightOfString(String(cell ?? '—'), { width: widths[i] - pad * 2 }))) + 12;
+      if (y + rh > BOTTOM) { doc.addPage(); y = PAGE.m; header(); }
+      if (isTotal) doc.rect(PAGE.m, y, W, rh).fill('#e6ecf8'); else if (idx % 2 === 0) doc.rect(PAGE.m, y, W, rh).fill(C.soft);
+      let x = PAGE.m;
+      r.forEach((cell, i) => { doc.font(font).fontSize(9).fillColor(C.text).text(String(cell ?? '—'), x + pad, y + 6, { width: widths[i] - pad * 2, align: cols[i].align || 'left' }); x += widths[i]; });
       y += rh;
+      doc.moveTo(PAGE.m, y).lineTo(PAGE.m + W, y).lineWidth(0.5).strokeColor(C.line).stroke();
     });
-
-    // totals row
-    if (ensure(26)) header();
-    doc.rect(PAGE.m, y, W, 24).fill(C.accentBg);
-    doc.font('Helvetica-Bold').fontSize(9.5).fillColor(C.navy);
-    text('TOTAL', xs[0] + px, y + 7);
-    text(`${sumOcc} / ${sumCap}`, xs[2] + px, y + 7, { width: 90 });
-    y += 24 + 22;
-  }
-
-  // ---------- field remarks (manually wrapped so it can span pages cleanly) ----------
-  function wrap(str, width, font, size) {
-    doc.font(font).fontSize(size);
-    const lines = [];
-    String(str).split(/\r?\n/).forEach(par => {
-      if (!par.trim()) { lines.push(''); return; }
-      let line = '';
-      par.split(/\s+/).forEach(word => {
-        // hard-split a single word that is wider than the column
-        while (doc.widthOfString(word) > width) {
-          let cut = word.length - 1;
-          while (cut > 1 && doc.widthOfString(word.slice(0, cut)) > width) cut--;
-          if (line) { lines.push(line); line = ''; }
-          lines.push(word.slice(0, cut)); word = word.slice(cut);
-        }
-        const test = line ? `${line} ${word}` : word;
-        if (doc.widthOfString(test) <= width) line = test;
-        else { lines.push(line); line = word; }
-      });
-      lines.push(line);
-    });
-    return lines;
-  }
-
-  function remarks() {
-    if (!report.field_remarks || !String(report.field_remarks).trim()) return;
-    section('Field Remarks', 50);
-    const lh = 14, width = W - 20;
-    const lines = wrap(report.field_remarks, width, 'Helvetica', 10);
-    let i = 0;
-    while (i < lines.length) {
-      if (y + lh > BOTTOM) newPage();
-      const fit = Math.max(1, Math.floor((BOTTOM - y) / lh));
-      const chunk = lines.slice(i, i + fit);
-      const boxH = chunk.length * lh + 14;
-      doc.roundedRect(PAGE.m, y, W, boxH, 6).lineWidth(0.8).fillAndStroke(C.soft, C.line);
-      doc.rect(PAGE.m, y + 4, 3, boxH - 8).fill(C.accent);
-      doc.font('Helvetica').fontSize(10).fillColor(C.text);
-      chunk.forEach((l, k) => text(l, PAGE.m + 14, y + 7 + k * lh, { width }));
-      y += boxH + 8;
-      i += chunk.length;
-    }
-    y += 10;
-  }
-
-  // ---------- prepared-by / signature block ----------
-  function signatures() {
-    const bh = 70;
-    ensure(bh + 10);
     y += 6;
-    const sw = (W - 40) / 2;
-    [['Prepared by', author], ['Noted by (MDRRMO Head)', '']].forEach(([role, name], i) => {
-      const x = PAGE.m + i * (sw + 40);
-      doc.moveTo(x, y + 36).lineTo(x + sw, y + 36).lineWidth(0.8).strokeColor(C.muted).stroke();
-      doc.font('Helvetica-Bold').fontSize(9.5).fillColor(C.navy);
-      text(name, x, y + 41, { width: sw, align: 'center' });
-      doc.font('Helvetica').fontSize(8.5).fillColor(C.muted);
-      text(role, x, y + 55, { width: sw, align: 'center' });
-    });
-    y += bh;
   }
 
-  // ---------- compose ----------
-  firstHeader();
-  detailsPanel();
-  statCards();
-  priority();
-  centersTable();
-  remarks();
-  signatures();
+  // ---------- I. Situation overview ----------
+  section('I. Situation Overview');
+  const where = report.brgy ? `in ${report.brgy}` : 'in the Municipality of San Nicolas';
+  let overview = `${name}${report.disaster_type ? ` (${report.disaster_type})` : ''} was logged by the MDRRMO ${where} on ${report.date_started ? dateLong(report.date_started) : 'an unrecorded date'}`;
+  overview += report.severity ? `, with ${String(report.severity).toLowerCase()} severity.` : '.';
+  overview += ` Incident status as of this report: ${INCIDENT_LABEL[report.incident_status] || report.incident_status || 'not recorded'}.`;
+  if (report.date_ended) overview += ` The incident was marked resolved on ${dateLong(report.date_ended)}.`;
+  para(overview, { after: 4 });
+  if (report.incident_remarks) para(report.incident_remarks, { color: C.muted, after: 4 });
+  para('Source: MDRRMO San Nicolas incident log', { size: 8.5, color: C.muted, after: 12 });
+
+  // ---------- II. Affected ----------
+  section('II. Status of Affected Areas and Population');
+  para(`A total of ${plural(t.families_cum, 'family', 'families')} or ${plural(t.persons_cum, 'person', 'persons')} were affected by ${name} in ${plural(t.barangays_affected, 'barangay', 'barangays')} (see Table 1).`, { after: 4 });
+  para('Counts cover the families registered at evacuation centers through RESCOM.', { size: 8.5, color: C.muted, after: 8 });
+  caption('Table 1. Number of Affected Families / Persons by Barangay of Origin');
+  if (byOrigin.length) {
+    table([{ label: 'Barangay of Origin', w: W - 200 }, { label: 'Affected Families', w: 100, align: 'right' }, { label: 'Affected Persons', w: 100, align: 'right' }],
+      [...byOrigin.map(b => [b.barangay, n(b.families), n(b.persons)]), ['TOTAL', n(t.families_cum), n(t.persons_cum)]], { total: true });
+  } else para('No evacuees have been registered under this incident yet.', { color: C.muted });
+  para('Source: MDRRMO San Nicolas evacuee registrations', { size: 8.5, color: C.muted, after: 12 });
+
+  // ---------- III. Displaced ----------
+  section('III. Status of Displaced Population');
+  sub('Inside Evacuation Centers');
+  para(`There are ${plural(t.families_now, 'family', 'families')} or ${plural(t.persons_now, 'person', 'persons')} currently taking temporary shelter in ${plural(t.centers_now, 'evacuation center', 'evacuation centers')} (see Table 2). In total, ${plural(t.families_cum, 'family', 'families')} or ${plural(t.persons_cum, 'person', 'persons')} have been registered in ${plural(t.centers_cum, 'evacuation center', 'evacuation centers')} since the incident began.`, { after: 8 });
+  caption('Table 2. Number of Displaced Families / Persons Inside Evacuation Centers');
+  if (centers.length) {
+    const cw = 62, first = W - cw * 6;
+    table([{ label: 'Evacuation Center', w: first }, { label: 'Families (Cum)', w: cw, align: 'right' }, { label: 'Families (Now)', w: cw, align: 'right' }, { label: 'Persons (Cum)', w: cw, align: 'right' }, { label: 'Persons (Now)', w: cw, align: 'right' }, { label: 'Male (Now)', w: cw, align: 'right' }, { label: 'Female (Now)', w: cw, align: 'right' }],
+      [...centers.map(c => [`${c.center_name}${c.barangay ? `\n${c.barangay}` : ''}`, n(c.families_cum), n(c.families_now), n(c.persons_cum), n(c.persons_now), n(c.male_now), n(c.female_now)]),
+        ['TOTAL', n(t.families_cum), n(t.families_now), n(t.persons_cum), n(t.persons_now), n(profile.male), n(profile.female)]], { total: true });
+  } else para('No evacuation center records for this incident yet.', { color: C.muted });
+  para('Cum = all registered since the incident began.  Now = currently staying in the center.', { size: 8.5, color: C.muted, after: 6 });
+  sub('Outside Evacuation Centers');
+  para('Not recorded. RESCOM registers evacuees at evacuation centers only, so families staying with relatives or friends are not counted.', { color: C.muted, after: 12 });
+
+  // ---------- IV. Profile ----------
+  section('IV. Profile of Displaced Population Inside Evacuation Centers');
+  caption('Table 3. Profile of persons currently inside evacuation centers');
+  const ages = profile.ages || {};
+  const rows3 = [
+    ['Sex', 'Male', n(profile.male)], ['Sex', 'Female', n(profile.female)],
+    ['Age group', '0 - 4 years old', n(ages['0-4'])], ['Age group', '5 - 17 years old', n(ages['5-17'])],
+    ['Age group', '18 - 59 years old', n(ages['18-59'])], ['Age group', '60 years old and above (senior citizens)', n(ages['60+'])],
+    ...((profile.vulnerable || []).length ? profile.vulnerable.map(v => ['Vulnerable sector', v.type, n(v.n)]) : [['Vulnerable sector', 'None flagged', '0']])
+  ];
+  table([{ label: 'Category', w: 130 }, { label: 'Group', w: W - 230 }, { label: 'Persons', w: 100, align: 'right' }], rows3);
+  para('Damaged houses and cost of assistance are not recorded in RESCOM and are not part of this report.', { size: 8.5, color: C.muted, after: 12 });
+
+  // ---------- Remarks + sign-off ----------
+  if (report.field_remarks) { section('V. Field Remarks'); para(report.field_remarks, { after: 12 }); }
+  ensure(80);
+  y += 6;
+  const sx = PAGE.m, sx2 = PAGE.m + W / 2 + 10, sw = W / 2 - 30;
+  doc.font('Helvetica').fontSize(9).fillColor(C.muted).text('Prepared by:', sx, y, { lineBreak: false }).text('Noted by:', sx2, y, { lineBreak: false });
+  doc.moveTo(sx, y + 34).lineTo(sx + sw, y + 34).lineWidth(0.7).strokeColor(C.text).stroke();
+  doc.moveTo(sx2, y + 34).lineTo(sx2 + sw, y + 34).stroke();
+  doc.font('Helvetica-Bold').fontSize(9.5).fillColor(C.text).text(author, sx, y + 38, { width: sw, lineBreak: false });
+  doc.font('Helvetica').fontSize(8.5).fillColor(C.muted).text('MDRRM Officer', sx2, y + 38, { width: sw, lineBreak: false });
+  y += 60;
 
   // ---------- footer on every page ----------
   const range = doc.bufferedPageRange();
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i);
-    doc.page.margins.bottom = 0;           // otherwise writing in the bottom margin spawns a new page
-    const fy = PAGE.h - 38;
-    doc.moveTo(PAGE.m, fy - 8).lineTo(PAGE.m + W, fy - 8).lineWidth(0.6).strokeColor(C.line).stroke();
-    doc.font('Helvetica').fontSize(7.5).fillColor(C.muted);
-    text('RESCOM · MDRRMO San Nicolas, Ilocos Norte', PAGE.m, fy, { width: W / 3, align: 'left' });
-    text(`Report ${reportNo} · Generated ${fmt(new Date())}`, PAGE.m + W / 3, fy, { width: W / 3, align: 'center' });
-    text(`Page ${i - range.start + 1} of ${range.count}`, PAGE.m + (W * 2) / 3, fy, { width: W / 3, align: 'right' });
+    doc.page.margins.bottom = 0;
+    const fy = PAGE.h - 40;
+    doc.moveTo(PAGE.m, fy - 6).lineTo(PAGE.m + W, fy - 6).lineWidth(0.5).strokeColor(C.line).stroke();
+    doc.font('Helvetica').fontSize(8).fillColor(C.muted)
+      .text(`MDRRMO San Nicolas, Ilocos Norte  |  DROMIC Report #${reportNo} as of ${dateTime(asOf)}`, PAGE.m, fy, { width: W - 70, lineBreak: false })
+      .text(`Page ${i - range.start + 1} of ${range.count}`, PAGE.m + W - 70, fy, { width: 70, align: 'right', lineBreak: false });
   }
-
   doc.end();
 }
 

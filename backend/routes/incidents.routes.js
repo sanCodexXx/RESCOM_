@@ -30,12 +30,22 @@ router.post('/', async (req, res) => {
   res.status(201).json(incident);
 });
 
+// Incident lifecycle:  Pending -> En Route -> Active -> Resolved
+//   Pending  : reported, nobody dispatched yet
+//   En Route : responders are on their way
+//   Active   : responders are on scene / the incident is on-going
+//   Resolved : finished; the end date is stamped (and cleared again if reopened)
+const INCIDENT_STATUSES = ['Pending', 'En Route', 'Active', 'Resolved'];
 router.patch('/:id/status', async (req, res) => {
   const { reporting_status } = req.body;
-  const ended = reporting_status === 'Resolved' ? 'NOW()' : 'date_ended';
+  if (!INCIDENT_STATUSES.includes(reporting_status)) {
+    return res.status(400).json({ error: `Status must be one of: ${INCIDENT_STATUSES.join(', ')}` });
+  }
   const { rows } = await db.query(
-    `UPDATE DISASTER_INCIDENTS SET reporting_status = $1, date_ended = ${reporting_status === 'Resolved' ? 'NOW()' : 'date_ended'}
-     WHERE incident_id = $2 RETURNING *`,
+    `UPDATE DISASTER_INCIDENTS
+        SET reporting_status = $1::varchar,
+            date_ended = CASE WHEN $1::varchar = 'Resolved' THEN NOW() ELSE NULL END
+      WHERE incident_id = $2 RETURNING *`,
     [reporting_status, req.params.id]
   );
   if (!rows[0]) return res.status(404).json({ error: 'Incident not found' });

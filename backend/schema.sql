@@ -142,7 +142,10 @@ CREATE TABLE DROMIC_REPORTS (
   report_date      TIMESTAMP NOT NULL DEFAULT NOW(),
   reporting_status VARCHAR(30) NOT NULL DEFAULT 'Active'
                    CHECK (reporting_status IN ('Draft', 'Active', 'Finalized')),
-  field_remarks    TEXT
+  field_remarks    TEXT,
+  report_no        INTEGER,
+  as_of            TIMESTAMP,
+  snapshot         JSONB
 );
 
 -- ------------------------------------------------------------

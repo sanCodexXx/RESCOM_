@@ -3,6 +3,7 @@ const db = require('../db');
 const { verifyToken } = require('../middleware/auth');
 const { emit, notify } = require('../utils/notify');
 
+const { BARANGAYS, normalizePhPhone } = require('../utils/barangays');
 const router = express.Router();
 router.use(verifyToken);
 
@@ -27,7 +28,7 @@ router.get('/', async (req, res) => {
   const { rows } = await db.query(`
     SELECT
       e.evacuee_id, e.first_name, e.middle_name, e.last_name, e.age, e.gender,
-      f.family_id, f.family_name, f.barangay,
+      f.family_id, f.family_name, f.barangay, f.contact_number,
       r.record_id, r.status AS record_status, r.date_evacuated,
       c.center_id, c.center_name,
       COALESCE(
@@ -51,22 +52,43 @@ router.get('/', async (req, res) => {
 // Body: { family: {family_name, household_address, barangay, contact_number} | family_id,
 //         evacuee: {first_name, last_name, age, gender},
 //         center_id, incident_id, priority_types: ['Elderly', ...] }
+
+// Every field of a registration is required except middle name and the
+// priority tags (a person may have none).
+function validateRegistration({ family, family_id, evacuee, center_id, incident_id }) {
+  const clean = (v) => String(v ?? '').trim();
+  if (!clean(evacuee?.first_name)) return 'First name is required';
+  if (!clean(evacuee?.last_name)) return 'Last name is required';
+  const age = Number(evacuee?.age);
+  if (evacuee?.age === '' || evacuee?.age == null || !Number.isInteger(age) || age < 0 || age > 120) {
+    return 'Age is required (a whole number from 0 to 120)';
+  }
+  if (!['Male', 'Female'].includes(evacuee?.gender)) return 'Gender must be Male or Female';
+  if (!center_id) return 'Evacuation center is required';
+  if (!incident_id) return 'Related disaster incident is required';
+  if (!family_id) {
+    if (!clean(family?.family_name)) return 'Family name is required';
+    if (!BARANGAYS.includes(family?.barangay)) return 'Choose a Barangay of Origin from the list';
+    if (!normalizePhPhone(family?.contact_number)) return 'Enter a valid Philippine mobile number, e.g. +63 917 123 4567';
+  }
+  return null;
+}
+
 router.post('/register', async (req, res) => {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
     const { family, family_id, evacuee, center_id, incident_id, priority_types = [] } = req.body;
 
-    if (!evacuee?.first_name || !evacuee?.last_name || !center_id) {
-      throw { status: 400, message: 'Evacuee name and evacuation center are required' };
-    }
+    const problem = validateRegistration({ family, family_id, evacuee, center_id, incident_id });
+    if (problem) throw { status: 400, message: problem };
 
     let famId = family_id;
     if (!famId && family?.family_name) {
       const { rows: [fam] } = await client.query(
         `INSERT INTO FAMILIES (family_name, household_address, barangay, contact_number)
          VALUES ($1,$2,$3,$4) RETURNING family_id`,
-        [family.family_name, family.household_address || null, family.barangay || 'Unknown', family.contact_number || null]
+        [family.family_name.trim(), family.household_address || null, family.barangay, normalizePhPhone(family.contact_number)]
       );
       famId = fam.family_id;
     }
@@ -77,7 +99,7 @@ router.post('/register', async (req, res) => {
       [famId || null, evacuee.first_name, evacuee.middle_name || null, evacuee.last_name, evacuee.age || null, evacuee.gender || null]
     );
 
-    const { rows: [center] } = await client.query('SELECT * FROM EVACUATION_CENTERS WHERE center_id = $1', [center_id]);
+    const { rows: [center] } = await client.query('SELECT * FROM EVACUATION_CENTERS WHERE center_id = $1 FOR UPDATE', [center_id]);
     if (!center) throw { status: 404, message: 'Evacuation center not found' };
     if (center.occupancy >= center.capacity) throw { status: 400, message: `${center.center_name} is already at full capacity` };
 
@@ -119,6 +141,7 @@ router.post('/register', async (req, res) => {
 // PUT /api/evacuees/:id — edit an evacuee's own details (name, age, gender)
 router.put('/:id', async (req, res) => {
   const { first_name, middle_name, last_name, age, gender } = req.body;
+  if (gender && !['Male', 'Female'].includes(gender)) return res.status(400).json({ error: 'Gender must be Male or Female' });
   const { rows } = await db.query(
     `UPDATE EVACUEES SET
        first_name  = COALESCE($1, first_name),
