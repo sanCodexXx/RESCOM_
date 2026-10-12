@@ -3,6 +3,14 @@ import { X, Check } from 'lucide-react';
 import { useUi } from '../../context/UiContext.jsx';
 import Button from './Button.jsx';
 
+// Confirmation messages are written as small HTML snippets with <b> for emphasis and may
+// contain names typed by users. Escape everything, then allow only <b> and </b> back.
+function safeMsg(msg) {
+  return String(msg ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/&lt;(\/?)b&gt;/g, '<$1b>');
+}
+
 export function ModalHost() {
   const { modal, closeModal, confirm, closeConfirm, success, closeSuccess } = useUi();
 
@@ -22,8 +30,8 @@ export function ModalHost() {
       onClick={(e) => { if (e.target === e.currentTarget) { closeModal(); closeConfirm(); closeSuccess(); } }}
     >
       {modal && (
-        <div className="glass-strong rounded-glass w-full max-w-[560px] max-h-[88vh] overflow-auto shadow-glass anim-pop scroll-thin">
-          <div className="px-4 sm:px-6 pt-5 flex justify-between items-start gap-3">
+        <div className="glass-strong rounded-glass w-full max-w-[560px] max-h-[88vh] flex flex-col overflow-hidden shadow-glass anim-pop">
+          <div className="px-4 sm:px-6 pt-5 flex justify-between items-start gap-3 shrink-0">
             <div>
               <b className="text-[17px] text-navy-900">{modal.title}</b>
               {modal.sub && <p className="text-[12.5px] text-navy-900/55 mt-1">{modal.sub}</p>}
@@ -32,15 +40,15 @@ export function ModalHost() {
               <X size={18} />
             </button>
           </div>
-          <div className="px-4 sm:px-6 py-5">{modal.body}</div>
-          <div className="px-4 sm:px-6 pb-6 flex flex-wrap gap-2.5">{modal.footer}</div>
+          <div className="px-4 sm:px-6 py-5 flex-1 min-h-0 overflow-y-auto scroll-thin">{modal.body}</div>
+          <div className="px-4 sm:px-6 pb-6 pt-3 flex flex-wrap gap-2.5 shrink-0 border-t border-navy-900/8">{modal.footer}</div>
         </div>
       )}
 
       {confirm && (
         <div className="glass-strong rounded-glass w-full max-w-[440px] p-6 shadow-glass anim-pop">
           <b className="text-[16px] text-navy-900">{confirm.title}</b>
-          <p className="text-[13px] text-navy-900/70 leading-relaxed mt-3" dangerouslySetInnerHTML={{ __html: confirm.msg }} />
+          <p className="text-[13px] text-navy-900/70 leading-relaxed mt-3" dangerouslySetInnerHTML={{ __html: safeMsg(confirm.msg) }} />
           <div className="flex gap-2.5 mt-5">
             <Button variant="ghost" block onClick={closeConfirm}>Cancel</Button>
             <Button variant="danger" block onClick={() => { confirm.onConfirm(); closeConfirm(); }}>Yes, continue</Button>

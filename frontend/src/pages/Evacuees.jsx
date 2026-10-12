@@ -1,21 +1,40 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Plus, LogOut, Search, Edit2, Trash2 } from 'lucide-react';
 import { PageHeader } from '../components/layout/Shell.jsx';
 import Button from '../components/ui/Button.jsx';
 import Badge, { STATUS_PILL } from '../components/ui/Badge.jsx';
-import { Field, Ctrl, TextInput, Select } from '../components/ui/Field.jsx';
+import { Field, Ctrl, TextInput, Select, RadioGroup } from '../components/ui/Field.jsx';
 import { api } from '../lib/api.js';
 import { useUi } from '../context/UiContext.jsx';
 import { getSocket } from '../lib/socket.js';
+import { BARANGAYS, normalizePhPhone, stripPhoneChars } from '../lib/barangays.js';
+import { peekSeed, clearSeed } from '../lib/searchSeed.js';
 
 const PRIORITY_TYPES = ['Elderly', 'PWD', 'Pregnant', 'Infant', 'Lactating Mother', 'With Illness', 'Solo Parent'];
+
+function validateEvacuee(f, { full = true } = {}) {
+  const e = {};
+  if (!f.first_name.trim()) e.first_name = 'Required';
+  if (!f.last_name.trim()) e.last_name = 'Required';
+  const age = Number(f.age);
+  if (f.age === '' || f.age == null || !Number.isInteger(age) || age < 0 || age > 120) e.age = 'Enter a whole number, 0 to 120';
+  if (!['Male', 'Female'].includes(f.gender)) e.gender = 'Select Male or Female';
+  if (full) {
+    if (!f.family_name.trim()) e.family_name = 'Required';
+    if (!BARANGAYS.includes(f.barangay)) e.barangay = 'Select a barangay';
+    if (!normalizePhPhone(f.contact_number)) e.contact_number = 'Enter a valid PH mobile number, e.g. +63 917 123 4567';
+    if (!f.center_id) e.center_id = 'Select an evacuation center';
+    if (!f.incident_id) e.incident_id = 'Select the disaster incident';
+  }
+  return e;
+}
 
 export default function Evacuees() {
   const { toast, openModal, closeModal, openConfirm } = useUi();
   const [evacuees, setEvacuees] = useState([]);
   const [centers, setCenters] = useState([]);
   const [incidents, setIncidents] = useState([]);
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(() => peekSeed('evacuees') || '');
   const [loading, setLoading] = useState(true);
 
   async function load() {
@@ -28,6 +47,7 @@ export default function Evacuees() {
   }
 
   useEffect(() => {
+    clearSeed();
     load();
     const s = getSocket();
     const handler = () => load();
@@ -50,16 +70,18 @@ export default function Evacuees() {
   }
 
   function editModal(e) {
-    let form = { first_name: e.first_name, middle_name: e.middle_name || '', last_name: e.last_name, age: e.age || '', gender: e.gender || 'Male' };
+    let form = { first_name: e.first_name, middle_name: e.middle_name || '', last_name: e.last_name, age: e.age ?? '', gender: e.gender || '' };
+    const ctl = {};
     openModal({
       title: 'Edit Evacuee',
       sub: `${e.first_name} ${e.last_name}`,
-      body: <EditForm initial={form} onChange={f => (form = f)} />,
+      body: <EditForm initial={form} ctl={ctl} onChange={f => (form = f)} />,
       footer: <>
         <Button variant="ghost" block onClick={closeModal}>Cancel</Button>
         <Button block onClick={async () => {
-          if (!form.first_name || !form.last_name) { toast('First and last name are required', 'bad'); return; }
-          try { await api.put(`/evacuees/${e.evacuee_id}`, form); closeModal(); toast('Evacuee updated', 'ok'); load(); }
+          const errs = validateEvacuee(form, { full: false });
+          if (Object.keys(errs).length) { ctl.setErrors?.(errs); toast('Please complete all required fields', 'bad'); return; }
+          try { await api.put(`/evacuees/${e.evacuee_id}`, { ...form, age: parseInt(form.age, 10) }); closeModal(); toast('Evacuee updated', 'ok'); load(); }
           catch (err) { toast(err.message, 'bad'); }
         }}>Save Changes</Button>
       </>
@@ -78,26 +100,32 @@ export default function Evacuees() {
   }
 
   function registerModal() {
+    const openIncidents = incidents.filter(i => i.reporting_status !== 'Resolved');
+    if (!centers.length) { toast('Add an evacuation center first (Evacuation Centers page).', 'bad'); return; }
+    if (!openIncidents.length) { toast('Log a Disaster Incident first. Every evacuee must be linked to one.', 'bad'); return; }
     let form = {
-      family_name: '', household_address: '', barangay: '', contact_number: '',
-      first_name: '', middle_name: '', last_name: '', age: '', gender: 'Male',
-      center_id: centers[0]?.center_id || '', incident_id: incidents[0]?.incident_id || '',
+      family_name: '', barangay: '', contact_number: '',
+      first_name: '', middle_name: '', last_name: '', age: '', gender: '',
+      center_id: (centers.find(c => c.capacity - c.occupancy > 0) || centers[0]).center_id,
+      incident_id: openIncidents[0].incident_id,
       priority_types: []
     };
+    const ctl = {};
     openModal({
       title: 'Register Evacuee',
-      sub: 'Log a new family and its members at an evacuation center',
-      body: <RegisterForm initial={form} centers={centers} incidents={incidents} onChange={f => (form = f)} />,
+      sub: 'Log a new family and its members at an evacuation center. Fields marked * are required.',
+      body: <RegisterForm initial={form} ctl={ctl} centers={centers} incidents={openIncidents} onChange={f => (form = f)} />,
       footer: <>
         <Button variant="ghost" block onClick={closeModal}>Cancel</Button>
         <Button block onClick={async () => {
-          if (!form.first_name || !form.last_name || !form.center_id) { toast('Evacuee name and center are required', 'bad'); return; }
+          const errs = validateEvacuee(form);
+          if (Object.keys(errs).length) { ctl.setErrors?.(errs); toast('Please complete all required fields', 'bad'); return; }
           try {
             await api.post('/evacuees/register', {
-              family: { family_name: form.family_name || `${form.last_name} Family`, household_address: form.household_address, barangay: form.barangay, contact_number: form.contact_number },
-              evacuee: { first_name: form.first_name, middle_name: form.middle_name, last_name: form.last_name, age: form.age ? parseInt(form.age) : null, gender: form.gender },
+              family: { family_name: form.family_name.trim(), barangay: form.barangay, contact_number: normalizePhPhone(form.contact_number) },
+              evacuee: { first_name: form.first_name.trim(), middle_name: form.middle_name.trim(), last_name: form.last_name.trim(), age: parseInt(form.age, 10), gender: form.gender },
               center_id: form.center_id,
-              incident_id: form.incident_id || null,
+              incident_id: form.incident_id,
               priority_types: form.priority_types
             });
             closeModal(); toast('Evacuee registered', 'ok'); load();
@@ -162,53 +190,71 @@ export default function Evacuees() {
   );
 }
 
-function EditForm({ initial, onChange }) {
+function useFormState(initial, ctl) {
   const [form, setForm] = useState(initial);
-  const set = (k, v) => { const next = { ...form, [k]: v }; setForm(next); onChange(next); };
+  const [errors, setErrors] = useState({});
+  useEffect(() => { ctl.setErrors = setErrors; }, []);
+  return { form, setForm, errors, setErrors };
+}
+
+function NameAgeGender({ form, set, errors }) {
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-3">
-        <Field label="First Name"><Ctrl><TextInput value={form.first_name} onChange={e => set('first_name', e.target.value)} /></Ctrl></Field>
-        <Field label="Middle Name"><Ctrl><TextInput value={form.middle_name} onChange={e => set('middle_name', e.target.value)} /></Ctrl></Field>
-        <Field label="Last Name"><Ctrl><TextInput value={form.last_name} onChange={e => set('last_name', e.target.value)} /></Ctrl></Field>
+        <Field label="First Name" required error={errors.first_name}><Ctrl error={errors.first_name}><TextInput value={form.first_name} onChange={e => set('first_name', e.target.value)} autoComplete="off" /></Ctrl></Field>
+        <Field label="Middle Name"><Ctrl><TextInput value={form.middle_name} onChange={e => set('middle_name', e.target.value)} autoComplete="off" placeholder="Optional" /></Ctrl></Field>
+        <Field label="Last Name" required error={errors.last_name}><Ctrl error={errors.last_name}><TextInput value={form.last_name} onChange={e => set('last_name', e.target.value)} autoComplete="off" /></Ctrl></Field>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
-        <Field label="Age"><Ctrl><TextInput type="number" value={form.age} onChange={e => set('age', e.target.value)} /></Ctrl></Field>
-        <Field label="Gender"><Ctrl><Select value={form.gender} onChange={e => set('gender', e.target.value)}><option>Male</option><option>Female</option></Select></Ctrl></Field>
+        <Field label="Age" required error={errors.age}><Ctrl error={errors.age}><TextInput type="number" inputMode="numeric" min="0" max="120" value={form.age} onChange={e => set('age', e.target.value)} /></Ctrl></Field>
+        <Field label="Gender" required error={errors.gender}><RadioGroup name="gender" value={form.gender} onChange={v => set('gender', v)} options={['Male', 'Female']} error={errors.gender} /></Field>
       </div>
     </>
   );
 }
 
-function RegisterForm({ initial, centers, incidents, onChange }) {
-  const [form, setForm] = useState(initial);
-  const set = (k, v) => { const next = { ...form, [k]: v }; setForm(next); onChange(next); };
-  const toggleTag = (t) => set('priority_types', form.priority_types.includes(t) ? form.priority_types.filter(x => x !== t) : [...form.priority_types, t]);
+function EditForm({ initial, ctl, onChange }) {
+  const { form, setForm, errors, setErrors } = useFormState(initial, ctl);
+  const set = (k, v) => { const next = { ...form, [k]: v }; setForm(next); onChange(next); if (errors[k]) setErrors(({ [k]: _, ...rest }) => rest); };
+  return <NameAgeGender form={form} set={set} errors={errors} />;
+}
 
+function RegisterForm({ initial, ctl, centers, incidents, onChange }) {
+  const { form, setForm, errors, setErrors } = useFormState(initial, ctl);
+  const autoFamily = useRef('');
+  const set = (k, v) => {
+    let next = { ...form, [k]: v };
+    // Suggest "<Last name> Family" until the person types their own family name.
+    if (k === 'last_name' && (form.family_name === '' || form.family_name === autoFamily.current)) {
+      autoFamily.current = v.trim() ? `${v.trim()} Family` : '';
+      next.family_name = autoFamily.current;
+    }
+    setForm(next); onChange(next);
+    if (errors[k]) setErrors(({ [k]: _, ...rest }) => rest);
+  };
+  const toggleTag = (t) => set('priority_types', form.priority_types.includes(t) ? form.priority_types.filter(x => x !== t) : [...form.priority_types, t]);
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-3">
-        <Field label="First Name"><Ctrl><TextInput value={form.first_name} onChange={e => set('first_name', e.target.value)} /></Ctrl></Field>
-        <Field label="Middle Name"><Ctrl><TextInput value={form.middle_name} onChange={e => set('middle_name', e.target.value)} /></Ctrl></Field>
-        <Field label="Last Name"><Ctrl><TextInput value={form.last_name} onChange={e => set('last_name', e.target.value)} /></Ctrl></Field>
-      </div>
+      <NameAgeGender form={form} set={set} errors={errors} />
+      <Field label="Family Name" required error={errors.family_name}><Ctrl error={errors.family_name}><TextInput value={form.family_name} onChange={e => set('family_name', e.target.value)} placeholder="e.g. Santos Family" autoComplete="off" /></Ctrl></Field>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
-        <Field label="Age"><Ctrl><TextInput type="number" value={form.age} onChange={e => set('age', e.target.value)} /></Ctrl></Field>
-        <Field label="Gender"><Ctrl><Select value={form.gender} onChange={e => set('gender', e.target.value)}><option>Male</option><option>Female</option></Select></Ctrl></Field>
+        <Field label="Barangay of Origin" required error={errors.barangay}>
+          <Ctrl error={errors.barangay}><Select value={form.barangay} onChange={e => set('barangay', e.target.value)}>
+            <option value="">Select barangay…</option>
+            {BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
+          </Select></Ctrl>
+        </Field>
+        <Field label="Contact Number" required error={errors.contact_number}>
+          <Ctrl error={errors.contact_number}><TextInput type="tel" inputMode="tel" autoComplete="tel" maxLength={17} placeholder="+63 9XX XXX XXXX" value={form.contact_number} onChange={e => set('contact_number', stripPhoneChars(e.target.value))} /></Ctrl>
+        </Field>
       </div>
-      <Field label="Family Name"><Ctrl><TextInput value={form.family_name} onChange={e => set('family_name', e.target.value)} placeholder="e.g. Santos Family" /></Ctrl></Field>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
-        <Field label="Barangay of Origin"><Ctrl><TextInput value={form.barangay} onChange={e => set('barangay', e.target.value)} placeholder="e.g. Barangay 12" /></Ctrl></Field>
-        <Field label="Contact Number"><Ctrl><TextInput value={form.contact_number} onChange={e => set('contact_number', e.target.value)} /></Ctrl></Field>
-      </div>
-      <Field label="Evacuation Center"><Ctrl><Select value={form.center_id} onChange={e => set('center_id', e.target.value)}>
-        {centers.map(c => <option key={c.center_id} value={c.center_id}>{c.center_name} ({c.capacity - c.occupancy} slots left)</option>)}
+      <Field label="Evacuation Center" required error={errors.center_id}><Ctrl error={errors.center_id}><Select value={form.center_id} onChange={e => set('center_id', e.target.value)}>
+        {centers.map(c => { const left = c.capacity - c.occupancy; return <option key={c.center_id} value={c.center_id} disabled={left <= 0}>{c.center_name} ({left > 0 ? `${left} slots left` : 'full'})</option>; })}
       </Select></Ctrl></Field>
-      <Field label="Related Incident (optional)"><Ctrl><Select value={form.incident_id} onChange={e => set('incident_id', e.target.value)}>
-        <option value="">None</option>
+      <Field label="Related Disaster Incident" required error={errors.incident_id}><Ctrl error={errors.incident_id}><Select value={form.incident_id} onChange={e => set('incident_id', e.target.value)}>
         {incidents.map(i => <option key={i.incident_id} value={i.incident_id}>{i.disaster_name}</option>)}
       </Select></Ctrl></Field>
-      <Field label="Priority Tags">
+      <Field label="Priority Tags (optional)">
         <div className="flex flex-wrap gap-2">
           {PRIORITY_TYPES.map(t => (
             <button key={t} type="button" onClick={() => toggleTag(t)}

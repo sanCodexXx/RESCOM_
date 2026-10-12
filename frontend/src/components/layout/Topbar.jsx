@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Menu, Bell, MoreVertical, Check, CheckCheck, Trash2, Eye, X } from 'lucide-react';
+import { Menu, Bell, MoreVertical, Check, CheckCheck, Trash2, Eye, X, Search, ChevronDown, Settings as SettingsIcon, LogOut, Users, Building2, AlertTriangle, CornerDownLeft } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { api } from '../../lib/api.js';
 import { getSocket } from '../../lib/socket.js';
+import { NAV } from './Sidebar.jsx';
+import { setSeed } from '../../lib/searchSeed.js';
 
 const TYPE_DOT = { info: 'bg-accent-500', success: 'bg-success', warning: 'bg-warn', danger: 'bg-danger' };
 
@@ -40,13 +42,21 @@ function NotifRow({ n, onRead, onUnread, onDelete, onView }) {
   );
 }
 
-export default function Topbar({ onToggleSidebar }) {
+export default function Topbar({ onToggleSidebar, onNav, onLogout }) {
   const { user } = useAuth();
   const [openNotif, setOpenNotif] = useState(false);
   const [openFull, setOpenFull] = useState(false);
   const [notifs, setNotifs] = useState([]);
   const [viewing, setViewing] = useState(null);
   const ref = useRef(null);
+  const menuRef = useRef(null);
+  const searchInput = useRef(null);
+  const [openMenu, setOpenMenu] = useState(false);
+  const [openSearch, setOpenSearch] = useState(false);
+  const [query, setQuery] = useState('');
+  const [active, setActive] = useState(0);
+  const [index, setIndex] = useState({ evacuees: [], centers: [], incidents: [] });
+  const [indexLoading, setIndexLoading] = useState(false);
 
   const load = useCallback(async () => {
     try { setNotifs(await api.get('/notifications')); } catch (e) { /* silent */ }
@@ -61,10 +71,56 @@ export default function Topbar({ onToggleSidebar }) {
   }, [load]);
 
   useEffect(() => {
-    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpenNotif(false); }
+    function onDoc(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpenNotif(false);
+      if (menuRef.current && !menuRef.current.contains(e.target)) setOpenMenu(false);
+    }
+    function onKey(e) { if (e.key === 'Escape') { setOpenMenu(false); setOpenNotif(false); closeSearch(); } }
     document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
   }, []);
+
+  // ---- search ----
+  async function openSearchBar() {
+    setOpenNotif(false); setOpenMenu(false);
+    setOpenSearch(true); setQuery(''); setActive(0);
+    setTimeout(() => searchInput.current?.focus(), 30);
+    setIndexLoading(true);
+    try {
+      const [evacuees, centers, incidents] = await Promise.all([api.get('/evacuees'), api.get('/centers'), api.get('/incidents')]);
+      setIndex({ evacuees, centers, incidents });
+    } catch (e) { /* suggestions fall back to page links only */ }
+    finally { setIndexLoading(false); }
+  }
+  function closeSearch() { setOpenSearch(false); setQuery(''); }
+
+  const q = query.trim().toLowerCase();
+  const has = (...f) => f.filter(Boolean).join(' ').toLowerCase().includes(q);
+  const pages = NAV.filter(n => !n.adminOnly || user?.role === 'ADMIN_STAFF');
+  const groups = [];
+  if (!q) {
+    groups.push({ title: 'Quick links', icon: CornerDownLeft, items: pages.map(n => ({ key: 'p' + n.key, label: n.label, sub: 'Go to page', go: () => onNav(n.key) })) });
+  } else {
+    const ev = index.evacuees.filter(e => has(e.first_name, e.middle_name, e.last_name, e.family_name, e.barangay, e.center_name)).slice(0, 5)
+      .map(e => ({ key: 'e' + e.evacuee_id, label: `${e.first_name} ${e.last_name}`, sub: [e.family_name, e.barangay, e.center_name].filter(Boolean).join(' · '), go: () => { setSeed('evacuees', `${e.first_name} ${e.last_name}`); onNav('evacuees'); } }));
+    const ce = index.centers.filter(c => has(c.center_name, c.barangay, c.address)).slice(0, 4)
+      .map(c => ({ key: 'c' + c.center_id, label: c.center_name, sub: `${c.barangay} · ${c.occupancy}/${c.capacity} · ${c.status}`, go: () => { setSeed('centers', c.center_id); onNav('centers'); } }));
+    const inc = index.incidents.filter(i => has(i.disaster_name, i.disaster_type, i.brgy)).slice(0, 4)
+      .map(i => ({ key: 'i' + i.incident_id, label: i.disaster_name, sub: [i.disaster_type, i.brgy, i.reporting_status].filter(Boolean).join(' · '), go: () => onNav('incidents') }));
+    const pg = pages.filter(n => has(n.label)).slice(0, 3).map(n => ({ key: 'p' + n.key, label: n.label, sub: 'Go to page', go: () => onNav(n.key) }));
+    if (ev.length) groups.push({ title: 'Evacuees', icon: Users, items: ev });
+    if (ce.length) groups.push({ title: 'Evacuation Centers', icon: Building2, items: ce });
+    if (inc.length) groups.push({ title: 'Disaster Incidents', icon: AlertTriangle, items: inc });
+    if (pg.length) groups.push({ title: 'Pages', icon: CornerDownLeft, items: pg });
+  }
+  const flat = groups.flatMap(g => g.items);
+  function pick(item) { if (!item) return; closeSearch(); item.go(); }
+  function onSearchKey(e) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => Math.min(a + 1, flat.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => Math.max(a - 1, 0)); }
+    else if (e.key === 'Enter') { e.preventDefault(); pick(flat[active]); }
+  }
 
   const unread = notifs.filter(n => !n.is_read).length;
 
@@ -81,8 +137,10 @@ export default function Topbar({ onToggleSidebar }) {
       <button onClick={onToggleSidebar} className="text-navy-900/60 hover:bg-navy-900/8 rounded-lg p-2"><Menu size={18} /></button>
       <div className="flex-1" />
 
+      <button onClick={openSearchBar} aria-label="Search" title="Search" className="text-navy-900/60 hover:bg-navy-900/8 rounded-lg p-2"><Search size={18} /></button>
+
       <div className="relative">
-        <button onClick={() => setOpenNotif(v => !v)} className="relative text-navy-900/60 hover:bg-navy-900/8 rounded-lg p-2">
+        <button onClick={() => { setOpenMenu(false); setOpenNotif(v => !v); }} aria-label="Notifications" className="relative text-navy-900/60 hover:bg-navy-900/8 rounded-lg p-2">
           <Bell size={18} />
           {unread > 0 && <span className="absolute top-0.5 right-0.5 bg-danger text-white text-[9px] rounded-full px-1 font-bold">{unread}</span>}
         </button>
@@ -107,16 +165,65 @@ export default function Topbar({ onToggleSidebar }) {
         )}
       </div>
 
-      {/* Profile (display only, no dropdown) */}
-      <div className="flex items-center gap-2 px-2 py-1">
-        <div className="w-[34px] h-[34px] rounded-full bg-gradient-to-br from-accent-500 to-accent-700 text-white grid place-items-center text-[12px] font-bold shrink-0 border border-white/20">
-          {initials}
-        </div>
-        <div className="hidden sm:block text-left leading-tight">
-          <b className="block text-[12.5px] text-navy-900">{user?.first_name} {user?.last_name}</b>
-          <span className="text-[10.5px] text-navy-900/50">{user?.role === 'ADMIN_STAFF' ? 'Admin Staff' : 'Field Personnel'}</span>
-        </div>
+      <div className="relative" ref={menuRef}>
+        <button onClick={() => { setOpenNotif(false); setOpenMenu(v => !v); }} aria-haspopup="menu" aria-expanded={openMenu}
+          className="flex items-center gap-2 hover:bg-navy-900/8 rounded-xl px-2 py-1">
+          <div className="w-[34px] h-[34px] rounded-full bg-gradient-to-br from-accent-500 to-accent-700 text-white grid place-items-center text-[12px] font-bold shrink-0 border border-white/20">{initials}</div>
+          <div className="hidden sm:block text-left leading-tight">
+            <b className="block text-[12.5px] text-navy-900">{user?.first_name} {user?.last_name}</b>
+            <span className="text-[10.5px] text-navy-900/50">{user?.role === 'ADMIN_STAFF' ? 'Admin Staff' : 'Field Personnel'}</span>
+          </div>
+          <ChevronDown size={14} className={`text-navy-900/45 transition ${openMenu ? 'rotate-180' : ''}`} />
+        </button>
+        {openMenu && (
+          <div role="menu" className="absolute right-0 top-12 w-[230px] bg-white border border-navy-900/10 rounded-xl shadow-glass overflow-hidden z-40">
+            <div className="px-4 py-3 border-b border-navy-900/8">
+              <b className="block text-[13px] text-navy-900 truncate">{user?.first_name} {user?.last_name}</b>
+              <span className="block text-[11px] text-navy-900/50 truncate">{user?.email}</span>
+            </div>
+            <button role="menuitem" onClick={() => { setOpenMenu(false); onNav('settings'); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[12.5px] text-navy-900 hover:bg-navy-900/6"><SettingsIcon size={15} />Account Settings</button>
+            <button role="menuitem" onClick={() => { setOpenMenu(false); onLogout(); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[12.5px] text-danger hover:bg-danger-bg border-t border-navy-900/8"><LogOut size={15} />Logout</button>
+          </div>
+        )}
       </div>
+
+      {openSearch && (
+        <>
+          <div className="fixed inset-0 z-30 bg-navy-900/25" onClick={closeSearch} />
+          <div className="absolute inset-0 z-40 glass-strong flex items-center gap-2 px-3 sm:px-5">
+            <Search size={18} className="text-navy-900/45 shrink-0" />
+            <input ref={searchInput} value={query} onChange={e => { setQuery(e.target.value); setActive(0); }} onKeyDown={onSearchKey}
+              placeholder="Search evacuees, centers, incidents, pages…" aria-label="Search" autoComplete="off"
+              className="flex-1 min-w-0 bg-transparent outline-none text-[14px] text-navy-900 placeholder:text-navy-900/40 py-2" />
+            <button onClick={closeSearch} aria-label="Close search" className="text-navy-900/50 hover:bg-navy-900/8 rounded-lg p-2"><X size={18} /></button>
+          </div>
+          <div className="fixed left-3 right-3 top-[68px] sm:left-auto sm:right-5 sm:w-[480px] z-40 bg-white border border-navy-900/10 rounded-2xl shadow-glass overflow-hidden">
+            <div className="max-h-[60vh] overflow-y-auto scroll-thin py-1">
+              {indexLoading && q && <div className="px-4 py-3 text-[12px] text-navy-900/45">Loading suggestions…</div>}
+              {!indexLoading && q && flat.length === 0 && <div className="px-4 py-6 text-center text-[12.5px] text-navy-900/50">No results for “{query.trim()}”</div>}
+              {groups.map(g => (
+                <div key={g.title}>
+                  <div className="px-4 pt-2.5 pb-1 text-[10.5px] uppercase tracking-wide font-semibold text-navy-900/40">{g.title}</div>
+                  {g.items.map(it => {
+                    const idx = flat.indexOf(it);
+                    return (
+                      <button key={it.key} onMouseEnter={() => setActive(idx)} onClick={() => pick(it)}
+                        className={`w-full text-left px-4 py-2 flex items-center gap-3 ${idx === active ? 'bg-accent-500/10' : 'hover:bg-navy-900/4'}`}>
+                        <g.icon size={15} className="text-navy-900/40 shrink-0" />
+                        <span className="min-w-0 flex-1">
+                          <b className="block text-[12.5px] text-navy-900 truncate">{it.label}</b>
+                          {it.sub && <span className="block text-[11px] text-navy-900/50 truncate">{it.sub}</span>}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            <div className="hidden sm:flex items-center gap-3 px-4 py-2 border-t border-navy-900/8 text-[10.5px] text-navy-900/40"><span>↑↓ to move</span><span>Enter to open</span><span>Esc to close</span></div>
+          </div>
+        </>
+      )}
 
       {/* Full notifications view */}
       {openFull && (

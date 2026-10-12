@@ -28,7 +28,7 @@ export default function Settings() {
 
   return (
     <>
-      <PageHeader title="Settings" subtitle="Manage your RESCOM account" />
+      <PageHeader title="Account Settings" subtitle="Manage your RESCOM account" />
 
       <div className="max-w-[560px] flex flex-col gap-4">
         <div className="glass rounded-glass shadow-glass-sm p-6">

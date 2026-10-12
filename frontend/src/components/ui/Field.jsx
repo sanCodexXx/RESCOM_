@@ -1,9 +1,9 @@
 import React from 'react';
 
-export function Field({ label, error, children, className = '' }) {
+export function Field({ label, required, error, children, className = '' }) {
   return (
     <div className={`mb-4 ${className}`}>
-      {label && <label className="block text-xs font-semibold text-navy-900/70 mb-1.5">{label}</label>}
+      {label && <label className="block text-xs font-semibold text-navy-900/70 mb-1.5">{label}{required && <span className="text-danger ml-0.5" aria-hidden="true">*</span>}</label>}
       {children}
       {error && <div className="text-[11.5px] text-danger mt-1">{error}</div>}
     </div>
@@ -36,5 +36,23 @@ export function Select({ children, ...props }) {
     <select {...props} className={`flex-1 border-0 outline-none bg-transparent py-2.5 text-[13.5px] text-navy-900 min-w-0 cursor-pointer [&>option]:text-black ${props.className || ''}`}>
       {children}
     </select>
+  );
+}
+
+export function RadioGroup({ name, value, onChange, options, error }) {
+  return (
+    <div role="radiogroup" className="flex gap-3">
+      {options.map(o => {
+        const on = value === o;
+        return (
+          <label key={o} className={`flex-1 flex items-center gap-2 rounded-xl border px-3 py-2.5 cursor-pointer text-[13.5px] transition
+            ${on ? 'border-accent-500/70 bg-accent-500/8 text-navy-900 font-semibold ring-2 ring-accent-400/25' : 'bg-white text-navy-900/70 hover:border-navy-900/30'}
+            ${error && !on ? 'border-danger/70' : on ? '' : 'border-navy-900/15'}`}>
+            <input type="radio" name={name} value={o} checked={on} onChange={() => onChange(o)} className="w-4 h-4 accent-[#1F5FBF]" />
+            {o}
+          </label>
+        );
+      })}
+    </div>
   );
 }

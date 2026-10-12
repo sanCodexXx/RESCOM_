@@ -1,20 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, FileBarChart, Users, Building2, ShieldAlert, Download } from 'lucide-react';
+import { Plus, FileBarChart, Users, Building2, ShieldAlert, Download, Lock, Info } from 'lucide-react';
 import { PageHeader } from '../components/layout/Shell.jsx';
 import Button from '../components/ui/Button.jsx';
 import Badge, { STATUS_PILL } from '../components/ui/Badge.jsx';
-import { StatCard } from '../components/ui/StatCard.jsx';
 import { Field, Ctrl, TextArea, Select } from '../components/ui/Field.jsx';
 import { api } from '../lib/api.js';
 import { useUi } from '../context/UiContext.jsx';
 import { getSocket } from '../lib/socket.js';
 
+// Database values stay Draft / Active / Finalized; these are the names people see.
+const STATUS_LABEL = { Draft: 'Draft', Active: 'On-Going', Finalized: 'Final' };
+
+const fmtAsOf = (d) => new Date(d).toLocaleString('en-PH', { timeZone: 'Asia/Manila', day: '2-digit', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+
 export default function DromicReports() {
-  const { toast, openModal, closeModal } = useUi();
+  const { toast, openModal, closeModal, openConfirm } = useUi();
   const [reports, setReports] = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -24,7 +27,6 @@ export default function DromicReports() {
     } catch (e) { toast(e.message, 'bad'); }
     finally { setLoading(false); }
   }
-
   useEffect(() => {
     load();
     const s = getSocket();
@@ -34,27 +36,19 @@ export default function DromicReports() {
   }, []);
 
   function generateModal() {
-    let form = { incident_id: incidents[0]?.incident_id || '', field_remarks: '' };
+    const finalIds = new Set(reports.filter(r => r.reporting_status === 'Finalized').map(r => r.incident_id));
+    const open = incidents.filter(i => !finalIds.has(i.incident_id));
+    if (!open.length) { toast('Every incident already has a final report. Log a new incident first.', 'bad'); return; }
+    const form = { incident_id: open[0].incident_id, field_remarks: '' };
     openModal({
       title: 'Generate DROMIC Report',
-      sub: 'Compiles current figures for a disaster incident into an official report',
-      body: (
-        <>
-          <Field label="Disaster Incident">
-            <Ctrl><Select defaultValue={form.incident_id} onChange={e => (form.incident_id = e.target.value)}>
-              {incidents.map(i => <option key={i.incident_id} value={i.incident_id}>{i.disaster_name} — {i.brgy}</option>)}
-            </Select></Ctrl>
-          </Field>
-          <Field label="Field Remarks">
-            <Ctrl><TextArea placeholder="Relief distribution status, ongoing needs, notes for the record…" onChange={e => (form.field_remarks = e.target.value)} /></Ctrl>
-          </Field>
-        </>
-      ),
+      sub: 'Creates the next numbered report for an incident, with the figures as of right now',
+      body: <GenerateForm incidents={open} reports={reports} form={form} />,
       footer: <>
         <Button variant="ghost" block onClick={closeModal}>Cancel</Button>
         <Button block onClick={async () => {
           if (!form.incident_id) { toast('Select a disaster incident', 'bad'); return; }
-          try { await api.post('/dromic', form); closeModal(); toast('DROMIC report generated', 'ok'); load(); }
+          try { const r = await api.post('/dromic', form); closeModal(); toast(`DROMIC Report #${r.report_no} generated`, 'ok'); load(); }
           catch (e) { toast(e.message, 'bad'); }
         }}><FileBarChart size={14} />Generate</Button>
       </>
@@ -64,22 +58,33 @@ export default function DromicReports() {
   async function viewSummary(r) {
     try {
       const data = await api.get(`/dromic/${r.report_id}/summary`);
-      setSummary(data);
+      const t = data.totals || {};
       openModal({
-        title: 'DROMIC Report Summary',
-        sub: `${r.disaster_name} · Generated ${new Date(r.report_date).toLocaleString()}`,
+        title: `DROMIC Report #${r.report_no} on ${r.disaster_name}`,
+        sub: `as of ${fmtAsOf(r.as_of || r.report_date)} · ${STATUS_LABEL[r.reporting_status]}`,
         body: (
           <div>
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              <MiniStat icon={<Users size={16} />} label="Evacuated" value={data.totals.total_evacuated} />
-              <MiniStat icon={<ShieldAlert size={16} />} label="Priority Cases" value={data.totals.priority_count} />
-              <MiniStat icon={<Building2 size={16} />} label="Centers" value={data.centers.length} />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <MiniStat icon={<Users size={16} />} label="Persons now" value={t.persons_now} />
+              <MiniStat icon={<Users size={16} />} label="Persons (cum)" value={t.persons_cum} />
+              <MiniStat icon={<Building2 size={16} />} label="Centers in use" value={t.centers_now} />
+              <MiniStat icon={<ShieldAlert size={16} />} label="Vulnerable" value={(data.profile?.vulnerable || []).reduce((a, v) => a + v.n, 0)} />
             </div>
-            <b className="text-navy-900 text-[13px] block mb-2">Centers Involved</b>
-            {data.centers.map(c => (
-              <div key={c.center_id} className="flex justify-between text-[12.5px] py-2 border-b border-navy-900/10">
-                <span className="text-navy-900/70">{c.center_name}</span>
-                <span className="text-navy-900/45">{c.occupancy} / {c.capacity}</span>
+            <b className="text-navy-900 text-[13px] block mb-2">Inside Evacuation Centers</b>
+            <div className="text-[11px] grid grid-cols-[1fr_auto_auto] gap-x-4 text-navy-900/45 px-1 pb-1"><span>Center</span><span>Families now / cum</span><span>Persons now / cum</span></div>
+            {(data.centers || []).map(c => (
+              <div key={c.center_id} className="grid grid-cols-[1fr_auto_auto] gap-x-4 text-[12.5px] py-2 border-b border-navy-900/10 px-1">
+                <span className="text-navy-900/80 min-w-0 truncate">{c.center_name}</span>
+                <span className="text-navy-900/60 text-right">{c.families_now} / {c.families_cum}</span>
+                <span className="text-navy-900/60 text-right">{c.persons_now} / {c.persons_cum}</span>
+              </div>
+            ))}
+            {!data.centers?.length && <p className="text-navy-900/45 text-[12.5px]">No evacuees registered under this incident yet.</p>}
+            <b className="text-navy-900 text-[13px] block mt-4 mb-2">Affected, by Barangay of Origin</b>
+            {(data.byOrigin || []).map(b => (
+              <div key={b.barangay} className="flex justify-between text-[12.5px] py-1.5 border-b border-navy-900/10 px-1">
+                <span className="text-navy-900/80">{b.barangay}</span>
+                <span className="text-navy-900/55">{b.families} fam · {b.persons} persons</span>
               </div>
             ))}
             {r.field_remarks && (
@@ -88,6 +93,7 @@ export default function DromicReports() {
                 <p className="text-navy-900/65 text-[12.5px] leading-relaxed">{r.field_remarks}</p>
               </div>
             )}
+            <p className="text-[11px] text-navy-900/45 mt-4">The PDF follows the DSWD DROMIC layout: Situation Overview, Affected Population, Displaced Population and Profile.</p>
           </div>
         ),
         footer: <>
@@ -98,22 +104,27 @@ export default function DromicReports() {
     } catch (e) { toast(e.message, 'bad'); }
   }
 
-  // Downloads the A4 PDF (auth header required, so it's fetched as a blob
-  // rather than opened as a plain link) and triggers the browser's save dialog.
   async function downloadPdf(r) {
     try {
       const blob = await api.download(`/dromic/${r.report_id}/pdf`);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = `DROMIC-Report-${r.report_id}.pdf`;
+      a.href = url; a.download = `DROMIC-Report-${r.report_no || r.report_id}-${(r.disaster_name || 'incident').replace(/[^\w-]+/g, '_')}.pdf`;
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch (e) { toast(e.message, 'bad'); }
   }
 
   async function setStatus(r, status) {
-    try { await api.patch(`/dromic/${r.report_id}/status`, { reporting_status: status }); toast('Report ' + status.toLowerCase(), 'ok'); load(); }
+    try { await api.patch(`/dromic/${r.report_id}/status`, { reporting_status: status }); toast(`Report #${r.report_no} is now ${STATUS_LABEL[status]}`, 'ok'); load(); }
     catch (e) { toast(e.message, 'bad'); }
+  }
+  function finalize(r) {
+    openConfirm({
+      title: `Finalize Report #${r.report_no}?`,
+      msg: `This makes it the <b>final report</b> for ${r.disaster_name || 'this incident'}. A final report is locked, and no new reports can be generated for this incident afterwards.`,
+      onConfirm: () => setStatus(r, 'Finalized')
+    });
   }
 
   return (
@@ -121,28 +132,38 @@ export default function DromicReports() {
       <PageHeader title="DROMIC Reports" subtitle="Disaster Response Operations Monitoring and Information Center reports"
         actions={<Button onClick={generateModal}><Plus size={14} />Generate Report</Button>} />
 
+      <div className="glass rounded-glass shadow-glass-sm p-4 mb-4">
+        <div className="flex items-center gap-2 text-[12.5px] font-semibold text-navy-900 mb-2"><Info size={14} className="text-accent-400" />How report status works</div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[12px] text-navy-900/65 leading-relaxed">
+          <div><Badge className={STATUS_PILL.Draft}>Draft</Badge><p className="mt-1.5">Still being prepared. Press <b>Activate</b> to issue it.</p></div>
+          <div><Badge className={STATUS_PILL.Active}>On-Going</Badge><p className="mt-1.5">Issued while the disaster is still happening. For newer figures, generate the next numbered report (#2, #3…).</p></div>
+          <div><Badge className={STATUS_PILL.Finalized}>Final</Badge><p className="mt-1.5">The last report for the incident. It is locked and no more reports can be added.</p></div>
+        </div>
+      </div>
+
       <div className="glass rounded-glass shadow-glass-sm overflow-x-auto scroll-thin">
-        <table className="w-full min-w-[720px] border-collapse">
+        <table className="w-full min-w-[820px] border-collapse">
           <thead>
-            <tr>{['Disaster', 'Barangay', 'Generated By', 'Date', 'Status', ''].map(h => (
+            <tr>{['Report', 'Disaster', 'Barangay', 'As of', 'Prepared By', 'Status', ''].map(h => (
               <th key={h} className="text-left text-[11px] uppercase tracking-wide text-navy-900/45 font-semibold px-4 py-3">{h}</th>
             ))}</tr>
           </thead>
           <tbody>
             {reports.map(r => (
               <tr key={r.report_id} className="border-b border-navy-900/8 cursor-pointer hover:bg-navy-900/4" onClick={() => viewSummary(r)}>
+                <td className="px-4 py-3 text-[12.5px] text-navy-900"><b>#{r.report_no ?? r.report_id}</b></td>
                 <td className="px-4 py-3 text-[12.5px] text-navy-900"><b>{r.disaster_name || '—'}</b></td>
                 <td className="px-4 py-3 text-[12.5px] text-navy-900/65">{r.brgy || '—'}</td>
+                <td className="px-4 py-3 text-[12px] text-navy-900/55">{fmtAsOf(r.as_of || r.report_date)}</td>
                 <td className="px-4 py-3 text-[12.5px] text-navy-900/65">{r.author_first} {r.author_last}</td>
-                <td className="px-4 py-3 text-[12px] text-navy-900/45">{new Date(r.report_date).toLocaleString()}</td>
-                <td className="px-4 py-3"><Badge className={STATUS_PILL[r.reporting_status]}>{r.reporting_status}</Badge></td>
-                <td className="px-4 py-3 flex gap-1.5" onClick={e => e.stopPropagation()}>
-                  {r.reporting_status !== 'Finalized' && (
-                    <Button size="sm" variant="ghost" onClick={() => setStatus(r, r.reporting_status === 'Draft' ? 'Active' : 'Finalized')}>
-                      {r.reporting_status === 'Draft' ? 'Activate' : 'Finalize'}
-                    </Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => downloadPdf(r)}><Download size={13} />PDF</Button>
+                <td className="px-4 py-3"><Badge className={STATUS_PILL[r.reporting_status]}>{STATUS_LABEL[r.reporting_status]}</Badge></td>
+                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                  <div className="flex gap-1.5 items-center">
+                    {r.reporting_status === 'Draft' && <Button size="sm" variant="ghost" onClick={() => setStatus(r, 'Active')}>Activate</Button>}
+                    {r.reporting_status === 'Active' && <Button size="sm" variant="ghost" onClick={() => finalize(r)}>Finalize</Button>}
+                    {r.reporting_status === 'Finalized' && <span className="flex items-center gap-1 text-[11px] text-navy-900/45 px-1"><Lock size={12} />Locked</span>}
+                    <Button size="sm" variant="ghost" onClick={() => downloadPdf(r)}><Download size={13} />PDF</Button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -154,11 +175,29 @@ export default function DromicReports() {
   );
 }
 
+function GenerateForm({ incidents, reports, form }) {
+  const [incidentId, setIncidentId] = useState(String(form.incident_id));
+  const next = (reports.filter(r => String(r.incident_id) === incidentId).reduce((m, r) => Math.max(m, r.report_no || 0), 0)) + 1;
+  return (
+    <>
+      <Field label="Disaster Incident" required>
+        <Ctrl><Select value={incidentId} onChange={e => { setIncidentId(e.target.value); form.incident_id = e.target.value; }}>
+          {incidents.map(i => <option key={i.incident_id} value={i.incident_id}>{i.disaster_name} — {i.brgy || 'San Nicolas'}</option>)}
+        </Select></Ctrl>
+        <p className="text-[11.5px] text-navy-900/55 mt-1.5">This will be <b>DROMIC Report #{next}</b> for the selected incident.</p>
+      </Field>
+      <Field label="Field Remarks (optional)">
+        <Ctrl><TextArea placeholder="Relief distribution status, ongoing needs, notes for the record…" onChange={e => (form.field_remarks = e.target.value)} /></Ctrl>
+      </Field>
+    </>
+  );
+}
+
 function MiniStat({ icon, label, value }) {
   return (
     <div className="glass rounded-xl p-3.5 text-center">
       <div className="text-accent-400 flex justify-center mb-1.5">{icon}</div>
-      <div className="text-[20px] font-bold text-navy-900">{value}</div>
+      <div className="text-[20px] font-bold text-navy-900">{value ?? 0}</div>
       <div className="text-[10.5px] text-navy-900/45">{label}</div>
     </div>
   );

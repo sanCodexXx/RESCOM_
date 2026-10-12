@@ -10,7 +10,7 @@ export const NAV = [
   { key: 'incidents', icon: AlertTriangle, label: 'Disaster Incidents' },
   { key: 'dromic', icon: FileBarChart, label: 'DROMIC Reports' },
   { key: 'users', icon: UserCog, label: 'Users', adminOnly: true },
-  { key: 'settings', icon: Settings, label: 'Settings' }
+  { key: 'settings', icon: Settings, label: 'Account Settings' }
 ];
 
 export default function Sidebar({ open, route, onNav, onLogout, role }) {
