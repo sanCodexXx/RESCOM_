@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, FileBarChart, Users, Building2, ShieldAlert, Download, Lock, Info } from 'lucide-react';
+import { Plus, FileBarChart, Users, Building2, ShieldAlert, Download, Lock, Info, FileSpreadsheet } from 'lucide-react';
 import { PageHeader } from '../components/layout/Shell.jsx';
 import Button from '../components/ui/Button.jsx';
 import Badge, { STATUS_PILL } from '../components/ui/Badge.jsx';
@@ -7,6 +7,7 @@ import { Field, Ctrl, TextArea, Select } from '../components/ui/Field.jsx';
 import { api } from '../lib/api.js';
 import { useUi } from '../context/UiContext.jsx';
 import { getSocket } from '../lib/socket.js';
+import { downloadDromicExcel } from '../lib/dromicExcel.js';
 
 // Database values stay Draft / Active / Finalized; these are the names people see.
 const STATUS_LABEL = { Draft: 'Draft', Active: 'On-Going', Finalized: 'Final' };
@@ -48,8 +49,12 @@ export default function DromicReports() {
         <Button variant="ghost" block onClick={closeModal}>Cancel</Button>
         <Button block onClick={async () => {
           if (!form.incident_id) { toast('Select a disaster incident', 'bad'); return; }
-          try { const r = await api.post('/dromic', form); closeModal(); toast(`DROMIC Report #${r.report_no} generated`, 'ok'); load(); }
-          catch (e) { toast(e.message, 'bad'); }
+          try {
+            const r = await api.post('/dromic', form); closeModal(); toast(`DROMIC Report #${r.report_no} generated`, 'ok'); load();
+            // Open the same figures in the DSWD Excel template right away.
+            const inc = incidents.find(i => String(i.incident_id) === String(form.incident_id));
+            await downloadExcel({ ...r, disaster_name: inc?.disaster_name });
+          } catch (e) { toast(e.message, 'bad'); }
         }}><FileBarChart size={14} />Generate</Button>
       </>
     });
@@ -93,12 +98,13 @@ export default function DromicReports() {
                 <p className="text-navy-900/65 text-[12.5px] leading-relaxed">{r.field_remarks}</p>
               </div>
             )}
-            <p className="text-[11px] text-navy-900/45 mt-4">The PDF follows the DSWD DROMIC layout: Situation Overview, Affected Population, Displaced Population and Profile.</p>
+            <p className="text-[11px] text-navy-900/45 mt-4">The Excel file is the official DSWD DROMIC template, filled in and ready to edit. The PDF follows the same DROMIC layout.</p>
           </div>
         ),
         footer: <>
           <Button variant="ghost" block onClick={closeModal}>Close</Button>
-          <Button block onClick={() => downloadPdf(r)}><Download size={14} />Download PDF</Button>
+          <Button variant="ghost" block onClick={() => downloadPdf(r)}><Download size={14} />PDF</Button>
+          <Button block onClick={() => downloadExcel(r)}><FileSpreadsheet size={14} />Download Excel</Button>
         </>
       });
     } catch (e) { toast(e.message, 'bad'); }
@@ -113,6 +119,11 @@ export default function DromicReports() {
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch (e) { toast(e.message, 'bad'); }
+  }
+
+  async function downloadExcel(r) {
+    try { await downloadDromicExcel(r); toast('Excel report downloaded. Open it in Excel to edit.', 'ok'); }
+    catch (e) { toast(e.message, 'bad'); }
   }
 
   async function setStatus(r, status) {
@@ -153,6 +164,7 @@ export default function DromicReports() {
                     {r.reporting_status === 'Draft' && <Button size="sm" variant="ghost" onClick={() => setStatus(r, 'Active')}>Activate</Button>}
                     {r.reporting_status === 'Active' && <Button size="sm" variant="ghost" onClick={() => finalize(r)}>Finalize</Button>}
                     {r.reporting_status === 'Finalized' && <span className="flex items-center gap-1 text-[11px] text-navy-900/45 px-1"><Lock size={12} />Locked</span>}
+                    <Button size="sm" variant="ghost" onClick={() => downloadExcel(r)}><FileSpreadsheet size={13} />Excel</Button>
                     <Button size="sm" variant="ghost" onClick={() => downloadPdf(r)}><Download size={13} />PDF</Button>
                   </div>
                 </td>
