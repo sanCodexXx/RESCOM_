@@ -70,15 +70,6 @@ export default function Incidents() {
       <PageHeader title="Disaster Incidents" subtitle="Active and past incidents reported by field personnel and admin staff"
         actions={<Button onClick={newModal}><Plus size={14} />Log Incident</Button>} />
 
-      <div className="glass rounded-glass shadow-glass-sm p-4 mb-4">
-        <div className="text-[12.5px] font-semibold text-navy-900 mb-2">How incident status works <span className="font-normal text-navy-900/50">(click a status badge to move it to the next step)</span></div>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-[12px] text-navy-900/65 leading-relaxed">
-          <div><Badge className={STATUS_PILL.Pending}>Pending</Badge><p className="mt-1.5">Reported, but no one has been sent yet.</p></div>
-          <div><Badge className={STATUS_PILL['En Route']}>En Route</Badge><p className="mt-1.5">Responders are on their way.</p></div>
-          <div><Badge className={STATUS_PILL.Active}>Active</Badge><p className="mt-1.5">Responders are on scene and the incident is on-going. Evacuees can be registered under it.</p></div>
-          <div><Badge className={STATUS_PILL.Resolved}>Resolved</Badge><p className="mt-1.5">Finished. The end date is recorded. Clicking again reopens it as Active.</p></div>
-        </div>
-      </div>
 
       <div className="glass rounded-glass shadow-glass-sm overflow-x-auto scroll-thin">
         <table className="w-full min-w-[760px] border-collapse">
