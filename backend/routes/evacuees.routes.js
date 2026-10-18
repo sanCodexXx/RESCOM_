@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken, requireRole } = require('../middleware/auth');
 const { emit, notify } = require('../utils/notify');
 
 const { BARANGAYS, normalizePhPhone } = require('../utils/barangays');
@@ -96,11 +96,12 @@ router.post('/register', async (req, res) => {
     const { rows: [ev] } = await client.query(
       `INSERT INTO EVACUEES (family_id, first_name, middle_name, last_name, age, gender)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [famId || null, evacuee.first_name, evacuee.middle_name || null, evacuee.last_name, evacuee.age || null, evacuee.gender || null]
+      [famId || null, evacuee.first_name, evacuee.middle_name || null, evacuee.last_name, Number(evacuee.age), evacuee.gender]
     );
 
     const { rows: [center] } = await client.query('SELECT * FROM EVACUATION_CENTERS WHERE center_id = $1 FOR UPDATE', [center_id]);
     if (!center) throw { status: 404, message: 'Evacuation center not found' };
+    if (['Closed', 'Standby'].includes(center.status)) throw { status: 400, message: `${center.center_name} is ${center.status.toLowerCase()} and is not accepting evacuees` };
     if (center.occupancy >= center.capacity) throw { status: 400, message: `${center.center_name} is already at full capacity` };
 
     const { rows: [record] } = await client.query(
@@ -141,16 +142,25 @@ router.post('/register', async (req, res) => {
 // PUT /api/evacuees/:id — edit an evacuee's own details (name, age, gender)
 router.put('/:id', async (req, res) => {
   const { first_name, middle_name, last_name, age, gender } = req.body;
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid evacuee id' });
   if (gender && !['Male', 'Female'].includes(gender)) return res.status(400).json({ error: 'Gender must be Male or Female' });
+  // Fields left out of the request are left alone. Age 0 (infants) is a real value.
+  const sent = (k) => Object.prototype.hasOwnProperty.call(req.body, k);
+  let ageVal = null;
+  if (sent('age') && age !== '' && age !== null) {
+    ageVal = Number(age);
+    if (!Number.isInteger(ageVal) || ageVal < 0 || ageVal > 120) return res.status(400).json({ error: 'Age must be a whole number from 0 to 120' });
+  }
   const { rows } = await db.query(
     `UPDATE EVACUEES SET
        first_name  = COALESCE($1, first_name),
-       middle_name = $2,
+       middle_name = CASE WHEN $7::boolean THEN $2 ELSE middle_name END,
        last_name   = COALESCE($3, last_name),
-       age         = $4,
+       age         = CASE WHEN $8::boolean THEN $4::int ELSE age END,
        gender      = COALESCE($5, gender)
      WHERE evacuee_id = $6 RETURNING *`,
-    [first_name, middle_name || null, last_name, age ? parseInt(age, 10) : null, gender, req.params.id]
+    [first_name, middle_name || null, last_name, ageVal, gender, id, sent('middle_name'), sent('age')]
   );
   if (!rows[0]) return res.status(404).json({ error: 'Evacuee not found' });
   emit('evacuee_registered', rows[0]);
@@ -163,15 +173,25 @@ router.patch('/:id/checkout', async (req, res) => {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
+    // One atomic step: only the request that actually flips Present -> Checked out
+    // goes on to lower the headcount, so double clicks / retries can't decrement twice.
     const { rows: [record] } = await client.query(
-      `SELECT * FROM EVACUATION_RECORDS WHERE evacuee_id = $1 AND status = 'Present' ORDER BY date_evacuated DESC LIMIT 1`,
+      `UPDATE EVACUATION_RECORDS SET status = 'Checked out'
+        WHERE status = 'Present' AND record_id = (
+          SELECT record_id FROM EVACUATION_RECORDS
+           WHERE evacuee_id = $1 AND status = 'Present'
+           ORDER BY date_evacuated DESC, record_id DESC LIMIT 1 FOR UPDATE)
+        RETURNING *`,
       [evacueeId]
     );
     if (!record) throw { status: 404, message: 'No active record for this evacuee' };
 
-    await client.query(`UPDATE EVACUATION_RECORDS SET status = 'Checked out' WHERE record_id = $1`, [record.record_id]);
+    // A Full center becomes Open again; Closed / Standby stay as an admin set them.
     const { rows: [center] } = await client.query(
-      `UPDATE EVACUATION_CENTERS SET occupancy = GREATEST(0, occupancy - 1), status = 'Open' WHERE center_id = $1 RETURNING *`,
+      `UPDATE EVACUATION_CENTERS
+          SET occupancy = GREATEST(0, occupancy - 1),
+              status = CASE WHEN status = 'Full' THEN 'Open' ELSE status END
+        WHERE center_id = $1 RETURNING *`,
       [record.center_id]
     );
     await client.query('COMMIT');
@@ -188,7 +208,7 @@ router.patch('/:id/checkout', async (req, res) => {
 // DELETE /api/evacuees/:id — full delete (family, records, priority flags
 // cascade via FK). If still checked in, first roll back the center's
 // occupancy so counts stay accurate.
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireRole('ADMIN_STAFF'), async (req, res) => {
   const evacueeId = parseInt(req.params.id, 10);
   const client = await db.pool.connect();
   try {
@@ -197,12 +217,15 @@ router.delete('/:id', async (req, res) => {
     if (!ev) throw { status: 404, message: 'Evacuee not found' };
 
     const { rows: [presentRecord] } = await client.query(
-      `SELECT * FROM EVACUATION_RECORDS WHERE evacuee_id = $1 AND status = 'Present' ORDER BY date_evacuated DESC LIMIT 1`,
+      `SELECT * FROM EVACUATION_RECORDS WHERE evacuee_id = $1 AND status = 'Present' ORDER BY date_evacuated DESC, record_id DESC LIMIT 1 FOR UPDATE`,
       [evacueeId]
     );
     if (presentRecord) {
       await client.query(
-        `UPDATE EVACUATION_CENTERS SET occupancy = GREATEST(0, occupancy - 1), status = 'Open' WHERE center_id = $1`,
+        `UPDATE EVACUATION_CENTERS
+            SET occupancy = GREATEST(0, occupancy - 1),
+                status = CASE WHEN status = 'Full' THEN 'Open' ELSE status END
+          WHERE center_id = $1`,
         [presentRecord.center_id]
       );
     }

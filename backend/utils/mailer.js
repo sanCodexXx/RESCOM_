@@ -60,7 +60,7 @@ async function sendPinEmail(toEmail, pin) {
       return { delivered: true, dev: false };
     } catch (err) {
       console.error('sendPinEmail (Brevo) failed:', err.message);
-      console.log(`[DEV EMAIL FALLBACK] RESCOM password reset PIN for ${toEmail}: ${pin}`);
+      if (process.env.NODE_ENV === 'development') console.log(`[DEV EMAIL FALLBACK] RESCOM password reset PIN for ${toEmail}: ${pin}`);
       return { delivered: false, dev: true, pin, error: err.message };
     }
   }
@@ -68,7 +68,7 @@ async function sendPinEmail(toEmail, pin) {
   // 2) SMTP
   const t = getTransporter();
   if (!t) {
-    console.log(`[DEV EMAIL] RESCOM password reset PIN for ${toEmail}: ${pin}`);
+    if (process.env.NODE_ENV === 'development') console.log(`[DEV EMAIL] RESCOM password reset PIN for ${toEmail}: ${pin}`);
     return { delivered: false, dev: true, pin };
   }
   try {
@@ -82,7 +82,7 @@ async function sendPinEmail(toEmail, pin) {
     return { delivered: true, dev: false };
   } catch (err) {
     console.error('sendPinEmail (SMTP) failed:', err.message);
-    console.log(`[DEV EMAIL FALLBACK] RESCOM password reset PIN for ${toEmail}: ${pin}`);
+    if (process.env.NODE_ENV === 'development') console.log(`[DEV EMAIL FALLBACK] RESCOM password reset PIN for ${toEmail}: ${pin}`);
     return { delivered: false, dev: true, pin, error: err.message };
   }
 }

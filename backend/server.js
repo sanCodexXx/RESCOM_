@@ -6,6 +6,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { Server } = require('socket.io');
+const jwt = require('jsonwebtoken');
 const { setIo } = require('./utils/notify');
 
 const authRoutes = require('./routes/auth.routes');
@@ -80,10 +81,31 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// Every socket must present a valid JWT (socket.handshake.auth.token). Without
+// this, anyone who knew the API URL could listen to evacuee registrations,
+// incidents and notifications without an account.
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake.auth && socket.handshake.auth.token;
+    if (!token) return next(new Error('unauthorized'));
+    socket.data.user = jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch (err) {
+    next(new Error('unauthorized'));
+  }
+});
+
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
-  socket.on('responder_location', ({ userId, latitude, longitude }) => {
-    io.emit('responder_location_updated', { userId, latitude, longitude });
+  const { user_id, role } = socket.data.user;
+  // Role rooms let role-targeted notifications reach only that role.
+  socket.join(`role:${role}`);
+  console.log('Client connected:', socket.id, `user ${user_id}`);
+  socket.on('responder_location', (msg) => {
+    const { latitude, longitude } = msg || {};
+    const lat = Number(latitude), lng = Number(longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
+    // userId comes from the verified token, never from the client.
+    io.emit('responder_location_updated', { userId: user_id, latitude: lat, longitude: lng });
   });
   socket.on('disconnect', () => console.log('Client disconnected:', socket.id));
 });

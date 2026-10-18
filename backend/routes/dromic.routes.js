@@ -1,8 +1,7 @@
 const express = require('express');
-const { buildDromicPdf } = require('../utils/dromicPdf');
-const { buildDromicXlsx } = require('../utils/dromicExcel');
+const { buildDromicPdf, buildDromicXlsx } = require('../utils/dromicPdf');
 const db = require('../db');
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken, requireRole } = require('../middleware/auth');
 const { emit } = require('../utils/notify');
 
 const router = express.Router();
@@ -245,7 +244,7 @@ router.get('/:id/xlsx', async (req, res) => {
 //   Draft      -> still being prepared
 //   Active     -> issued, the incident is still going (shown as "On-Going")
 //   Finalized  -> the final report, locked (shown as "Final")
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', requireRole('ADMIN_STAFF'), async (req, res) => {
   const { reporting_status } = req.body;
   if (!STATUSES.includes(reporting_status)) return res.status(400).json({ error: `Status must be one of: ${STATUSES.join(', ')}` });
   const { rows: [cur] } = await db.query('SELECT reporting_status FROM DROMIC_REPORTS WHERE report_id = $1', [req.params.id]);

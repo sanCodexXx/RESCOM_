@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken, requireRole } = require('../middleware/auth');
 const { emit, notify } = require('../utils/notify');
 
 const router = express.Router();
@@ -54,7 +54,7 @@ router.patch('/:id/status', async (req, res) => {
   res.json(rows[0]);
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireRole('ADMIN_STAFF'), async (req, res) => {
   await db.query('DELETE FROM DISASTER_INCIDENTS WHERE incident_id = $1', [req.params.id]);
   emit('incident_status_changed', { incident_id: parseInt(req.params.id, 10), deleted: true });
   res.json({ message: 'Incident log removed' });

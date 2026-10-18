@@ -14,6 +14,11 @@ function emit(event, payload) {
   if (io) io.emit(event, payload);
 }
 
+// Same, but only to sockets of one role (joined in server.js as `role:<ROLE>`).
+function emitToRole(role, event, payload) {
+  if (io) io.to(`role:${role}`).emit(event, payload);
+}
+
 // Creates a persisted notification, fans it out to every target user's
 // notification list, and pushes a realtime 'notification' event so open
 // clients refresh their bell immediately.
@@ -37,11 +42,13 @@ async function notify(title, message, { type = 'info', role = null } = {}) {
       );
     }
 
-    emit('notification', { ...n, is_read: false });
+    // Role-targeted notifications are pushed only to that role's sockets.
+    if (role) emitToRole(role, 'notification', { ...n, is_read: false });
+    else emit('notification', { ...n, is_read: false });
     return n;
   } catch (err) {
     console.error('notify() failed:', err.message);
   }
 }
 
-module.exports = { setIo, emit, notify };
+module.exports = { setIo, emit, emitToRole, notify };

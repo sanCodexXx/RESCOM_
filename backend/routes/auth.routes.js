@@ -38,6 +38,7 @@ function normalizePhPhone(raw) {
 }
 
 router.post('/register', async (req, res) => {
+  let client = null;
   try {
     const { first_name, last_name, username, email, password, unit, phone, role, admin_code } = req.body;
     if (!first_name || !last_name || !username || !email || !password) {
@@ -54,9 +55,16 @@ router.post('/register', async (req, res) => {
       }
     }
 
-    const { rows: [{ count }] } = await db.query('SELECT COUNT(*)::int AS count FROM USERS');
+    // Serialize registrations so two simultaneous sign-ups on an empty database
+    // cannot both become Admin Staff.
+    client = await db.pool.connect();
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(727001)');
+    const { rows: [{ count }] } = await client.query('SELECT COUNT(*)::int AS count FROM USERS');
     const isFirstUser = count === 0;
-    if (!isFirstUser && process.env.ALLOW_PUBLIC_REGISTRATION === 'false') {
+    // Closed by default: public sign-up only works when explicitly set to 'true'.
+    if (!isFirstUser && process.env.ALLOW_PUBLIC_REGISTRATION !== 'true') {
+      await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Sign-up is closed. Ask an MDRRMO administrator to create your account.' });
     }
     let safeRole = isFirstUser ? 'ADMIN_STAFF' : 'FIELD_PERSONNEL';
@@ -65,35 +73,42 @@ router.post('/register', async (req, res) => {
     if (!isFirstUser && role === 'ADMIN_STAFF') {
       const expected = process.env.ADMIN_SIGNUP_CODE;
       if (!expected) {
+        await client.query('ROLLBACK');
         return res.status(403).json({ error: 'Admin sign-up is not enabled. Register as Field Personnel, or ask an administrator to promote you.' });
       }
       const a = crypto.createHash('sha256').update(String(admin_code || '')).digest();
       const b = crypto.createHash('sha256').update(expected).digest();
       if (!crypto.timingSafeEqual(a, b)) {
+        await client.query('ROLLBACK');
         return res.status(403).json({ error: 'Invalid admin registration code' });
       }
       safeRole = 'ADMIN_STAFF';
     }
 
-    const exists = await db.query(
+    const exists = await client.query(
       'SELECT 1 FROM USERS WHERE username = $1 OR email = $2', [username, email]
     );
     if (exists.rows.length) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Username or email already exists' });
     }
 
     const hash = await bcrypt.hash(password, 10);
-    const { rows: [user] } = await db.query(
+    const { rows: [user] } = await client.query(
       `INSERT INTO USERS (first_name, last_name, username, email, password_hash, role, unit, phone)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        RETURNING user_id, first_name, last_name, username, email, role, unit, phone, created_at`,
       [first_name, last_name, username, email, hash, safeRole, unit || (safeRole === 'ADMIN_STAFF' ? 'Command Headquarters' : 'Responder Team'), cleanPhone]
     );
 
+    await client.query('COMMIT');
     res.status(201).json({ user, token: sign(user) });
   } catch (err) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
     console.error(err);
     res.status(500).json({ error: 'Registration failed' });
+  } finally {
+    if (client) client.release();
   }
 });
 
@@ -159,9 +174,9 @@ router.post('/forgot-password/request', async (req, res) => {
       );
       const result = channel === 'email' ? await sendPinEmail(user.email, pin) : await sendPinSms(user.phone, pin);
       // SMTP/SMS isn't configured (or failed) — nothing was actually sent.
-      // In development only, hand the PIN back so testing doesn't require
-      // tailing server logs. NEVER returned when NODE_ENV=production.
-      if (!result.delivered && process.env.NODE_ENV !== 'production') devPin = result.pin;
+      // Only when NODE_ENV is explicitly 'development' is the PIN handed back,
+      // so a missing/misspelled NODE_ENV on a server fails safe (no leak).
+      if (!result.delivered && process.env.NODE_ENV === 'development') devPin = result.pin;
 
       require('../utils/notify').notify(
         'Password reset requested',

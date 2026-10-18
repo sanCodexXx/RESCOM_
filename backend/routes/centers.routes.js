@@ -1,10 +1,11 @@
 const express = require('express');
 const multer = require('multer');
 const db = require('../db');
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken, requireRole } = require('../middleware/auth');
 const { emit, notify } = require('../utils/notify');
 
 const router = express.Router();
+const CENTER_STATUSES = ['Open', 'Full', 'Standby', 'Closed'];
 
 // Photos are kept in the database (CENTER_IMAGES), not on disk, so they
 // survive restarts and redeploys on hosts with an ephemeral filesystem.
@@ -61,9 +62,13 @@ router.get('/:id', async (req, res) => {
   res.json(rows[0]);
 });
 
-router.post('/', uploadImage, async (req, res) => {
+router.post('/', requireRole('ADMIN_STAFF'), uploadImage, async (req, res) => {
   const { center_name, barangay, address, capacity, status } = req.body;
   if (!center_name || !barangay) return res.status(400).json({ error: 'Center name and barangay are required' });
+  if (status && !CENTER_STATUSES.includes(status)) return res.status(400).json({ error: `Status must be one of: ${CENTER_STATUSES.join(', ')}` });
+  if (capacity !== undefined && capacity !== '' && (!Number.isInteger(Number(capacity)) || Number(capacity) < 0)) {
+    return res.status(400).json({ error: 'Capacity must be a whole number, 0 or more' });
+  }
 
   const { rows: [created] } = await db.query(
     `INSERT INTO EVACUATION_CENTERS (center_name, barangay, address, capacity, occupancy, status, image_url)
@@ -77,9 +82,28 @@ router.post('/', uploadImage, async (req, res) => {
   res.status(201).json(center);
 });
 
-router.put('/:id', uploadImage, async (req, res) => {
+router.put('/:id', requireRole('ADMIN_STAFF'), uploadImage, async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid center id' });
   const { center_name, barangay, address, capacity, status } = req.body;
+  if (status && !CENTER_STATUSES.includes(status)) return res.status(400).json({ error: `Status must be one of: ${CENTER_STATUSES.join(', ')}` });
+
+  const { rows: [current] } = await db.query('SELECT capacity, occupancy, status FROM EVACUATION_CENTERS WHERE center_id = $1', [id]);
+  if (!current) return res.status(404).json({ error: 'Center not found' });
+
+  // 0 is a valid capacity, so test "was it sent" rather than "is it truthy".
+  let newCapacity = current.capacity;
+  if (capacity !== undefined && capacity !== '') {
+    newCapacity = Number(capacity);
+    if (!Number.isInteger(newCapacity) || newCapacity < 0) return res.status(400).json({ error: 'Capacity must be a whole number, 0 or more' });
+    if (newCapacity < current.occupancy) {
+      return res.status(400).json({ error: `Capacity cannot be lower than the ${current.occupancy} people currently inside` });
+    }
+  }
+  // Keep the status in step with the headcount, unless an admin picked one on purpose.
+  let newStatus = status || current.status;
+  if (newStatus === 'Open' && newCapacity > 0 && current.occupancy >= newCapacity) newStatus = 'Full';
+  else if (!status && current.status === 'Full' && current.occupancy < newCapacity) newStatus = 'Open';
 
   const { rows } = await db.query(
     `UPDATE EVACUATION_CENTERS SET
@@ -90,7 +114,7 @@ router.put('/:id', uploadImage, async (req, res) => {
        status      = COALESCE($5, status),
        image_url   = COALESCE($6, image_url)
      WHERE center_id = $7 RETURNING *`,
-    [center_name, barangay, address, capacity ? parseInt(capacity, 10) : null, status, req.body.image_url || null, id]
+    [center_name, barangay, address, newCapacity, newStatus, req.body.image_url || null, id]
   );
   if (!rows[0]) return res.status(404).json({ error: 'Center not found' });
   await saveImage(req, id);
@@ -99,7 +123,7 @@ router.put('/:id', uploadImage, async (req, res) => {
   res.json(center);
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireRole('ADMIN_STAFF'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   await db.query('DELETE FROM EVACUATION_CENTERS WHERE center_id = $1', [id]);
   emit('center_updated', { center_id: id, deleted: true });

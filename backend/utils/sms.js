@@ -5,7 +5,7 @@
 async function sendPinSms(toPhone, pin) {
   const { SMS_API_URL, SMS_API_KEY, SMS_SENDER_NAME } = process.env;
   if (!SMS_API_URL || !SMS_API_KEY) {
-    console.log(`[DEV SMS] RESCOM password reset PIN for ${toPhone}: ${pin}`);
+    if (process.env.NODE_ENV === 'development') console.log(`[DEV SMS] RESCOM password reset PIN for ${toPhone}: ${pin}`);
     return { delivered: false, dev: true, pin };
   }
   try {
@@ -23,7 +23,7 @@ async function sendPinSms(toPhone, pin) {
     return { delivered: true, dev: false };
   } catch (err) {
     console.error('sendPinSms failed, falling back to console:', err.message);
-    console.log(`[DEV SMS] RESCOM password reset PIN for ${toPhone}: ${pin}`);
+    if (process.env.NODE_ENV === 'development') console.log(`[DEV SMS] RESCOM password reset PIN for ${toPhone}: ${pin}`);
     return { delivered: false, dev: true, pin, error: err.message };
   }
 }

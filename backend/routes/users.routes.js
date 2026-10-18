@@ -2,12 +2,13 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { verifyToken, requireRole } = require('../middleware/auth');
-const { emit } = require('../utils/notify');
+const { emitToRole } = require('../utils/notify');
+const emit = (event, payload) => emitToRole('ADMIN_STAFF', event, payload);
 
 const router = express.Router();
 router.use(verifyToken);
 
-router.get('/', async (req, res) => {
+router.get('/', requireRole('ADMIN_STAFF'), async (req, res) => {
   const { rows } = await db.query(
     `SELECT user_id, first_name, last_name, username, email, role, unit, phone, created_at
      FROM USERS ORDER BY created_at DESC`
