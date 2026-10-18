@@ -16,6 +16,7 @@ const evacueesRoutes = require('./routes/evacuees.routes');
 const priorityCasesRoutes = require('./routes/priorityCases.routes');
 const incidentsRoutes = require('./routes/incidents.routes');
 const dromicRoutes = require('./routes/dromic.routes');
+const analyticsRoutes = require('./routes/analytics.routes');
 const notificationsRoutes = require('./routes/notifications.routes');
 
 if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET.startsWith('change_this'))) {
@@ -72,6 +73,7 @@ app.use('/api/evacuees', evacueesRoutes);
 app.use('/api/priority-cases', priorityCasesRoutes);
 app.use('/api/incidents', incidentsRoutes);
 app.use('/api/dromic', dromicRoutes);
+app.use('/api/analytics', analyticsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));

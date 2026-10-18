@@ -29,6 +29,20 @@ const plural = (c, one, many) => `${n(c)} ${c === 1 ? one : many}`;
 const STATUS_LABEL = { Draft: 'DRAFT', Active: 'ON-GOING', Finalized: 'FINAL REPORT' };
 const INCIDENT_LABEL = { Pending: 'Pending response', 'En Route': 'Responders en route', Active: 'Active (on-going)', Resolved: 'Resolved' };
 
+function incidentSentence(report, name, where) {
+  let s = `${name}${report.disaster_type ? ` (${report.disaster_type})` : ''} was logged by the MDRRMO ${where} on ${report.date_started ? dateLong(report.date_started) : 'an unrecorded date'}`;
+  s += report.severity ? `, with ${String(report.severity).toLowerCase()} severity.` : '.';
+  s += ` Incident status as of this report: ${INCIDENT_LABEL[report.incident_status] || report.incident_status || 'not recorded'}.`;
+  if (report.date_ended) s += ` The incident was marked resolved on ${dateLong(report.date_ended)}.`;
+  return s;
+}
+
+function periodSentence(p, where) {
+  let s = `${p.incidents} ${p.incidents === 1 ? 'incident was' : 'incidents were'} logged by the MDRRMO ${where} from ${dateLong(p.from)} to ${dateLong(p.to)}, and ${p.resolved} ${p.resolved === 1 ? 'was' : 'were'} resolved.`;
+  if (p.types) s += ` By type: ${p.types}.`;
+  return s;
+}
+
 function buildDromicPdf(data, out) {
   const { report, totals = {}, byOrigin = [], centers = [], profile = {} } = data;
   const t = { families_cum: 0, persons_cum: 0, families_now: 0, persons_now: 0, centers_cum: 0, centers_now: 0, barangays_affected: 0, ...totals };
@@ -39,7 +53,7 @@ function buildDromicPdf(data, out) {
 
   const doc = new PDFDocument({
     size: 'A4', margin: PAGE.m, bufferPages: true,
-    info: { Title: `DROMIC Report #${reportNo} on ${name} as of ${dateTime(asOf)}`, Author: 'MDRRMO San Nicolas, Ilocos Norte', Subject: 'DROMIC Report', Creator: 'RESCOM' }
+    info: { Title: report.period ? `${name}, ${report.period.label}` : `DROMIC Report #${reportNo} on ${name} as of ${dateTime(asOf)}`, Author: 'MDRRMO San Nicolas, Ilocos Norte', Subject: 'DROMIC Report', Creator: 'RESCOM' }
   });
   doc.pipe(out);
   let y = PAGE.m;
@@ -59,14 +73,14 @@ function buildDromicPdf(data, out) {
   y += 14;
 
   // ---------- title ----------
-  const label = STATUS_LABEL[report.reporting_status] || String(report.reporting_status || '').toUpperCase();
+  const label = report.period ? 'SITUATION REPORT' : (STATUS_LABEL[report.reporting_status] || String(report.reporting_status || '').toUpperCase());
   const chipW = doc.font('Helvetica-Bold').fontSize(8.5).widthOfString(label) + 18;
   const finalRep = report.reporting_status === 'Finalized';
   doc.roundedRect(PAGE.m + W - chipW, y + 2, chipW, 18, 9).fill(finalRep ? C.okBg : C.blueBg);
   doc.font('Helvetica-Bold').fontSize(8.5).fillColor(finalRep ? C.ok : C.blue).text(label, PAGE.m + W - chipW, y + 7, { width: chipW, align: 'center', lineBreak: false });
   const titleW = W - chipW - 12;
   doc.font('Helvetica-Bold').fontSize(15).fillColor(C.navy);
-  const title = `MDRRMO DROMIC Report #${reportNo} on ${name}`;
+  const title = report.period ? `MDRRMO ${name}` : `MDRRMO DROMIC Report #${reportNo} on ${name}`;
   const th = doc.heightOfString(title, { width: titleW });
   doc.text(title, PAGE.m, y, { width: titleW });
   y += th + 3;
@@ -121,37 +135,34 @@ function buildDromicPdf(data, out) {
   // ---------- I. Situation overview ----------
   section('I. Situation Overview');
   const where = report.brgy ? `in ${report.brgy}` : 'in the Municipality of San Nicolas';
-  let overview = `${name}${report.disaster_type ? ` (${report.disaster_type})` : ''} was logged by the MDRRMO ${where} on ${report.date_started ? dateLong(report.date_started) : 'an unrecorded date'}`;
-  overview += report.severity ? `, with ${String(report.severity).toLowerCase()} severity.` : '.';
-  overview += ` Incident status as of this report: ${INCIDENT_LABEL[report.incident_status] || report.incident_status || 'not recorded'}.`;
-  if (report.date_ended) overview += ` The incident was marked resolved on ${dateLong(report.date_ended)}.`;
+  let overview = report.period ? periodSentence(report.period, where) : incidentSentence(report, name, where);
   para(overview, { after: 4 });
   if (report.incident_remarks) para(report.incident_remarks, { color: C.muted, after: 4 });
   para('Source: MDRRMO San Nicolas incident log', { size: 8.5, color: C.muted, after: 12 });
 
   // ---------- II. Affected ----------
   section('II. Status of Affected Areas and Population');
-  para(`A total of ${plural(t.families_cum, 'family', 'families')} or ${plural(t.persons_cum, 'person', 'persons')} were affected by ${name} in ${plural(t.barangays_affected, 'barangay', 'barangays')} (see Table 1).`, { after: 4 });
+  para(`A total of ${plural(t.families_cum, 'family', 'families')} or ${plural(t.persons_cum, 'person', 'persons')} were affected ${report.period ? 'in this period' : `by ${name}`} in ${plural(t.barangays_affected, 'barangay', 'barangays')} (see Table 1).`, { after: 4 });
   para('Counts cover the families registered at evacuation centers through RESCOM.', { size: 8.5, color: C.muted, after: 8 });
   caption('Table 1. Number of Affected Families / Persons by Barangay of Origin');
   if (byOrigin.length) {
     table([{ label: 'Barangay of Origin', w: W - 200 }, { label: 'Affected Families', w: 100, align: 'right' }, { label: 'Affected Persons', w: 100, align: 'right' }],
       [...byOrigin.map(b => [b.barangay, n(b.families), n(b.persons)]), ['TOTAL', n(t.families_cum), n(t.persons_cum)]], { total: true });
-  } else para('No evacuees have been registered under this incident yet.', { color: C.muted });
+  } else para(report.period ? 'No evacuees have been registered in this period.' : 'No evacuees have been registered under this incident yet.', { color: C.muted });
   para('Source: MDRRMO San Nicolas evacuee registrations', { size: 8.5, color: C.muted, after: 12 });
 
   // ---------- III. Displaced ----------
   section('III. Status of Displaced Population');
   sub('Inside Evacuation Centers');
-  para(`There are ${plural(t.families_now, 'family', 'families')} or ${plural(t.persons_now, 'person', 'persons')} currently taking temporary shelter in ${plural(t.centers_now, 'evacuation center', 'evacuation centers')} (see Table 2). In total, ${plural(t.families_cum, 'family', 'families')} or ${plural(t.persons_cum, 'person', 'persons')} have been registered in ${plural(t.centers_cum, 'evacuation center', 'evacuation centers')} since the incident began.`, { after: 8 });
+  para(`There are ${plural(t.families_now, 'family', 'families')} or ${plural(t.persons_now, 'person', 'persons')} currently taking temporary shelter in ${plural(t.centers_now, 'evacuation center', 'evacuation centers')} (see Table 2). In total, ${plural(t.families_cum, 'family', 'families')} or ${plural(t.persons_cum, 'person', 'persons')} have been registered in ${plural(t.centers_cum, 'evacuation center', 'evacuation centers')} ${report.period ? 'in this period' : 'since the incident began'}.`, { after: 8 });
   caption('Table 2. Number of Displaced Families / Persons Inside Evacuation Centers');
   if (centers.length) {
     const cw = 62, first = W - cw * 6;
     table([{ label: 'Evacuation Center', w: first }, { label: 'Families (Cum)', w: cw, align: 'right' }, { label: 'Families (Now)', w: cw, align: 'right' }, { label: 'Persons (Cum)', w: cw, align: 'right' }, { label: 'Persons (Now)', w: cw, align: 'right' }, { label: 'Male (Now)', w: cw, align: 'right' }, { label: 'Female (Now)', w: cw, align: 'right' }],
       [...centers.map(c => [`${c.center_name}${c.barangay ? `\n${c.barangay}` : ''}`, n(c.families_cum), n(c.families_now), n(c.persons_cum), n(c.persons_now), n(c.male_now), n(c.female_now)]),
         ['TOTAL', n(t.families_cum), n(t.families_now), n(t.persons_cum), n(t.persons_now), n(profile.male), n(profile.female)]], { total: true });
-  } else para('No evacuation center records for this incident yet.', { color: C.muted });
-  para('Cum = all registered since the incident began.  Now = currently staying in the center.', { size: 8.5, color: C.muted, after: 6 });
+  } else para(report.period ? 'No evacuation center records for this period.' : 'No evacuation center records for this incident yet.', { color: C.muted });
+  para(report.period ? 'Cum = all registered in this period.  Now = currently staying in the center.' : 'Cum = all registered since the incident began.  Now = currently staying in the center.', { size: 8.5, color: C.muted, after: 6 });
   sub('Outside Evacuation Centers');
   para('Not recorded. RESCOM registers evacuees at evacuation centers only, so families staying with relatives or friends are not counted.', { color: C.muted, after: 12 });
 
@@ -188,7 +199,7 @@ function buildDromicPdf(data, out) {
     const fy = PAGE.h - 40;
     doc.moveTo(PAGE.m, fy - 6).lineTo(PAGE.m + W, fy - 6).lineWidth(0.5).strokeColor(C.line).stroke();
     doc.font('Helvetica').fontSize(8).fillColor(C.muted)
-      .text(`MDRRMO San Nicolas, Ilocos Norte  |  DROMIC Report #${reportNo} as of ${dateTime(asOf)}`, PAGE.m, fy, { width: W - 70, lineBreak: false })
+      .text(`MDRRMO San Nicolas, Ilocos Norte  |  ${report.period ? report.period.label : `DROMIC Report #${reportNo} as of ${dateTime(asOf)}`}`, PAGE.m, fy, { width: W - 70, lineBreak: false })
       .text(`Page ${i - range.start + 1} of ${range.count}`, PAGE.m + W - 70, fy, { width: 70, align: 'right', lineBreak: false });
   }
   doc.end();
@@ -256,6 +267,7 @@ const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-PH', { timeZone: '
 const fmtAsOf = (d) => new Date(d).toLocaleString('en-PH', { timeZone: 'Asia/Manila', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 function reportLabel(report) {
+  if (report.period) return `Period: ${report.period.label}`;
   if (report.reporting_status === 'Finalized') return 'Final Report';
   return report.report_no > 1 ? `Progress Report No. ${report.report_no}` : 'Initial Report';
 }
@@ -340,7 +352,7 @@ async function buildDromicXlsx(data) {
   // ---- REGION I sheet (sheet5.xml) ----
   const { edits, overflow, used } = buildDetailEdits(ecRows);
   Object.assign(edits, {
-    M1: `Incident: ${report.disaster_name || ''}`,
+    M1: report.period ? (report.disaster_name || '') : `Incident: ${report.disaster_name || ''}`,
     M2: reportLabel(report),
     S1: `As of Date and Time: ${fmtAsOf(report.as_of || report.report_date)}`,
     AC1: `Prepared by: ${author}`,
