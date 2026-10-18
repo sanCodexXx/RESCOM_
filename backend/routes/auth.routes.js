@@ -6,6 +6,7 @@ const db = require('../db');
 const { verifyToken } = require('../middleware/auth');
 const { sendPinEmail } = require('../utils/mailer');
 const { sendPinSms } = require('../utils/sms');
+const { emit, notify } = require('../utils/notify');
 
 const router = express.Router();
 
@@ -22,25 +23,23 @@ function publicUser(u) {
   return rest;
 }
 
-// POST /api/auth/register
-// Security rules:
-//  - The very first account ever created becomes ADMIN_STAFF (bootstrap), so
-//    no demo seed data is needed in production.
-//  - After that, anyone who self-registers is FIELD_PERSONNEL. The role in
-//    the request body is ignored: only an existing Admin Staff can create or
-//    promote admins (Users page).
-//  - Set ALLOW_PUBLIC_REGISTRATION=false to close self-registration
-//    completely; admins then create accounts from the Users page.
 function normalizePhPhone(raw) {
   const d = String(raw || '').replace(/[\s\-().]/g, '');
   const m = d.match(/^(?:\+63|63|0)(9\d{9})$/);
   return m ? `+63${m[1]}` : null;
 }
 
+// ---------------------------------------------------------------------
+// POST /api/auth/register
+//  - The very first account becomes an active ADMIN_STAFF (bootstrap).
+//  - Every later sign-up is created as PENDING. The person picks Admin Staff or
+//    Field Personnel, but cannot log in until an administrator approves it.
+//  - Public sign-up stays closed unless ALLOW_PUBLIC_REGISTRATION=true.
+// ---------------------------------------------------------------------
 router.post('/register', async (req, res) => {
   let client = null;
   try {
-    const { first_name, last_name, username, email, password, unit, phone, role, admin_code } = req.body;
+    const { first_name, last_name, username, email, password, unit, phone, role } = req.body;
     if (!first_name || !last_name || !username || !email || !password) {
       return res.status(400).json({ error: 'All fields are required' });
     }
@@ -55,39 +54,24 @@ router.post('/register', async (req, res) => {
       }
     }
 
-    // Serialize registrations so two simultaneous sign-ups on an empty database
-    // cannot both become Admin Staff.
+    // Serialize sign-ups so two people registering at once on an empty database
+    // cannot both become the bootstrap admin.
     client = await db.pool.connect();
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock(727001)');
     const { rows: [{ count }] } = await client.query('SELECT COUNT(*)::int AS count FROM USERS');
     const isFirstUser = count === 0;
-    // Closed by default: public sign-up only works when explicitly set to 'true'.
+
     if (!isFirstUser && process.env.ALLOW_PUBLIC_REGISTRATION !== 'true') {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Sign-up is closed. Ask an MDRRMO administrator to create your account.' });
     }
-    let safeRole = isFirstUser ? 'ADMIN_STAFF' : 'FIELD_PERSONNEL';
-    // Anyone can ask for Admin Staff on the sign-up screen, but it is only
-    // granted with the secret code the MDRRMO sets in ADMIN_SIGNUP_CODE.
-    if (!isFirstUser && role === 'ADMIN_STAFF') {
-      const expected = process.env.ADMIN_SIGNUP_CODE;
-      if (!expected) {
-        await client.query('ROLLBACK');
-        return res.status(403).json({ error: 'Admin sign-up is not enabled. Register as Field Personnel, or ask an administrator to promote you.' });
-      }
-      const a = crypto.createHash('sha256').update(String(admin_code || '')).digest();
-      const b = crypto.createHash('sha256').update(expected).digest();
-      if (!crypto.timingSafeEqual(a, b)) {
-        await client.query('ROLLBACK');
-        return res.status(403).json({ error: 'Invalid admin registration code' });
-      }
-      safeRole = 'ADMIN_STAFF';
-    }
 
-    const exists = await client.query(
-      'SELECT 1 FROM USERS WHERE username = $1 OR email = $2', [username, email]
-    );
+    const requested = role === 'ADMIN_STAFF' ? 'ADMIN_STAFF' : 'FIELD_PERSONNEL';
+    const safeRole = isFirstUser ? 'ADMIN_STAFF' : requested;
+    const status = isFirstUser ? 'Active' : 'Pending';
+
+    const exists = await client.query('SELECT 1 FROM USERS WHERE username = $1 OR email = $2', [username, email]);
     if (exists.rows.length) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Username or email already exists' });
@@ -95,14 +79,34 @@ router.post('/register', async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
     const { rows: [user] } = await client.query(
-      `INSERT INTO USERS (first_name, last_name, username, email, password_hash, role, unit, phone)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       RETURNING user_id, first_name, last_name, username, email, role, unit, phone, created_at`,
-      [first_name, last_name, username, email, hash, safeRole, unit || (safeRole === 'ADMIN_STAFF' ? 'Command Headquarters' : 'Responder Team'), cleanPhone]
+      `INSERT INTO USERS (first_name, last_name, username, email, password_hash, role, unit, phone, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING user_id, first_name, last_name, username, email, role, unit, phone, created_at, status`,
+      [
+        first_name, last_name, username, email, hash, safeRole,
+        unit || (safeRole === 'ADMIN_STAFF' ? 'Command Headquarters' : 'Responder Team'),
+        cleanPhone, status
+      ]
     );
 
     await client.query('COMMIT');
-    res.status(201).json({ user, token: sign(user) });
+
+    // First user: signed in straight away.
+    if (isFirstUser) {
+      return res.status(201).json({ user, token: sign(user) });
+    }
+
+    // Everyone else: no token. Tell the admins, and refresh the Users page.
+    const label = safeRole === 'ADMIN_STAFF' ? 'Admin Staff' : 'Field Personnel';
+    emit('user_updated', user);
+    notify('New account awaiting approval', `${first_name} ${last_name} requested ${label} access.`, {
+      type: 'warning', role: 'ADMIN_STAFF'
+    });
+    res.status(201).json({
+      pending: true,
+      message: 'Your account was submitted. An administrator must approve it before you can log in.',
+      user: publicUser(user)
+    });
   } catch (err) {
     if (client) await client.query('ROLLBACK').catch(() => {});
     console.error(err);
@@ -113,7 +117,7 @@ router.post('/register', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------
-// Forgot password — 3-step PIN flow, delivered by email or SMS.
+// Forgot password: 3-step PIN flow, delivered by email or SMS.
 //   1) POST /forgot-password/request  { identifier | phone, channel: 'email'|'sms' }
 //   2) POST /forgot-password/verify   { identifier | phone, pin }
 //   3) POST /forgot-password/reset    { identifier | phone, pin, new_password }
@@ -131,7 +135,7 @@ function phoneKey(p) {
   return String(p || '').replace(/\D/g, '').slice(-10);
 }
 
-// A reset can be started with an email/username OR a registered mobile number.
+// A reset can start with an email/username OR a registered mobile number.
 // Steps 2 and 3 must use the same one, so every route resolves the user here.
 async function findResetUser({ identifier, phone }) {
   if (phone) {
@@ -173,18 +177,17 @@ router.post('/forgot-password/request', async (req, res) => {
         [user.user_id, pinHash, channel, expiresAt]
       );
       const result = channel === 'email' ? await sendPinEmail(user.email, pin) : await sendPinSms(user.phone, pin);
-      // SMTP/SMS isn't configured (or failed) — nothing was actually sent.
       // Only when NODE_ENV is explicitly 'development' is the PIN handed back,
-      // so a missing/misspelled NODE_ENV on a server fails safe (no leak).
+      // so a missing or misspelled NODE_ENV on a server fails safe (no leak).
       if (!result.delivered && process.env.NODE_ENV === 'development') devPin = result.pin;
 
-      require('../utils/notify').notify(
+      notify(
         'Password reset requested',
         `${user.username} requested a password reset PIN via ${channel}.`,
         { type: 'warning', role: 'ADMIN_STAFF' }
       );
     }
-    // Same reply whether or not the account exists — don't leak enumeration.
+    // Same reply whether or not the account exists, so nobody can probe for accounts.
     res.json({
       ok: true,
       message: devPin
@@ -237,7 +240,7 @@ router.post('/forgot-password/reset', async (req, res) => {
        ORDER BY created_at DESC LIMIT 1`,
       [user.user_id]
     );
-    if (!reset) return res.status(400).json({ error: 'Verify your PIN again — this reset session expired' });
+    if (!reset) return res.status(400).json({ error: 'Verify your PIN again. This reset session expired.' });
 
     const ok = await bcrypt.compare(pin, reset.pin_hash);
     if (!ok) return res.status(400).json({ error: 'Invalid or expired PIN' });
@@ -253,7 +256,9 @@ router.post('/forgot-password/reset', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------
 // POST /api/auth/login
+// ---------------------------------------------------------------------
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -268,6 +273,13 @@ router.post('/login', async (req, res) => {
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: 'Invalid username or password' });
 
+    if (user.status === 'Pending') {
+      return res.status(403).json({ error: 'Your account is waiting for approval from an MDRRMO administrator.' });
+    }
+    if (user.status === 'Inactive') {
+      return res.status(403).json({ error: 'Your account has been deactivated. Please contact an administrator.' });
+    }
+
     res.json({ user: publicUser(user), token: sign(user) });
   } catch (err) {
     console.error(err);
@@ -275,7 +287,9 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// GET /api/auth/me — resolve the current token to a fresh user record
+// ---------------------------------------------------------------------
+// GET /api/auth/me: resolve the current token to a fresh user record
+// ---------------------------------------------------------------------
 router.get('/me', verifyToken, async (req, res) => {
   const { rows } = await db.query('SELECT * FROM USERS WHERE user_id = $1', [req.user.user_id]);
   if (!rows[0]) return res.status(404).json({ error: 'User not found' });

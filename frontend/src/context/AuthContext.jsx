@@ -32,12 +32,15 @@ export function AuthProvider({ children }) {
     return user;
   }, []);
 
+  // Returns { pending: true } for a new sign-up awaiting approval (no login happens),
+  // or the user when the account was signed in straight away (the first admin).
   const register = useCallback(async (payload) => {
-    const { user, token } = await api.post('/auth/register', payload, { auth: false });
-    localStorage.setItem('rescom_token', token);
-    setUser(user);
+    const res = await api.post('/auth/register', payload, { auth: false });
+    if (!res.token) return { pending: true, message: res.message, user: res.user };
+    localStorage.setItem('rescom_token', res.token);
+    setUser(res.user);
     getSocket().connect();
-    return user;
+    return res.user;
   }, []);
 
   const logout = useCallback(() => {

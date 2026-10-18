@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Mail, Lock, Eye, EyeOff, AtSign, Phone, KeyRound, ShieldCheck, ClipboardList, ArrowLeft } from 'lucide-react';
+import { User, Mail, Lock, Eye, EyeOff, AtSign, Phone, ShieldCheck, ClipboardList, ArrowLeft, Clock } from 'lucide-react';
 import { RegisterLayout, AuthCard } from './AuthLayout.jsx';
 import { Field, Ctrl, TextInput } from '../../components/ui/Field.jsx';
 import Button from '../../components/ui/Button.jsx';
@@ -38,13 +38,15 @@ export default function Register({ goto }) {
   const { toast, openModal, closeModal } = useUi();
   const [role, setRole] = useState('');
   const [step, setStep] = useState(1);
-  const [f, setF] = useState({ full: '', email: '', username: '', phone: '', password: '', confirm: '', admin_code: '' });
+  const [f, setF] = useState({ full: '', email: '', username: '', phone: '', password: '', confirm: '' });
   const [agree, setAgree] = useState(false);
   const [show, setShow] = useState(false);
   const [show2, setShow2] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [submitted, setSubmitted] = useState(null);
   const set = k => e => setF(s => ({ ...s, [k]: e.target.value }));
+  const chosen = ROLES.find(r => r.value === role);
 
   const showLegal = () => openModal({
     title: 'Terms of Service & Privacy Policy',
@@ -60,21 +62,43 @@ export default function Register({ goto }) {
     if (!/^\S+@\S+\.\S+$/.test(f.email)) return setError('Enter a valid email address.');
     const phone = f.phone.trim() ? normalizePhPhone(f.phone) : null;
     if (f.phone.trim() && !phone) return setError('Enter a valid Philippine mobile number, e.g. +63 917 123 4567 or 0917 123 4567.');
-    if (role === 'ADMIN_STAFF' && !f.admin_code.trim()) return setError('Enter the admin registration code from your MDRRMO administrator.');
     if (f.password.length < 6) return setError('Password must be at least 6 characters.');
     if (f.password !== f.confirm) return setError('Passwords do not match.');
     if (!agree) return setError('Please accept the Terms of Service and Privacy Policy.');
     setError(''); setBusy(true);
     try {
-      await register({
+      const res = await register({
         first_name: parts.slice(0, -1).join(' '), last_name: parts.at(-1),
         username: f.username, email: f.email, phone: phone || undefined,
-        password: f.password, role, admin_code: role === 'ADMIN_STAFF' ? f.admin_code.trim() : undefined
+        password: f.password, role
       });
+      if (res?.pending) { setSubmitted({ name: parts[0], title: chosen.title }); return; }
       toast('Account created. Welcome!', 'ok');
-    } catch (err) { setError(err.message); toast(err.message, 'bad'); } finally { setBusy(false); }
+    } catch (err) {
+      setError(err.message); toast(err.message, 'bad');
+    } finally { setBusy(false); }
   }
+
   const eye = (v, fn) => <button type="button" aria-label="Toggle password" onClick={() => fn(x => !x)} className="text-navy-900/45 p-1">{v ? <EyeOff size={16} /> : <Eye size={16} />}</button>;
+
+  if (submitted) {
+    return (
+      <RegisterLayout>
+        <AuthCard className="max-w-[420px] text-center">
+          <span className="mx-auto w-14 h-14 rounded-full bg-warn-bg text-warn grid place-items-center"><Clock size={26} /></span>
+          <h1 className="text-[26px] font-extrabold text-[#0a1490] mt-4">Request Submitted</h1>
+          <p className="text-navy-900/70 text-[14px] leading-relaxed mt-3">
+            Thank you, <b className="text-navy-900">{submitted.name}</b>. Your <b className="text-navy-900">{submitted.title}</b> account is waiting for approval from an MDRRMO administrator.
+          </p>
+          <p className="text-navy-900/55 text-[12.5px] mt-2">You can log in once it has been approved.</p>
+          <button type="button" onClick={() => goto('login')}
+            className="w-full mt-6 rounded-xl bg-[#0a5cb8] hover:bg-[#084a96] text-white font-semibold py-3 text-[14px] transition">
+            Back to Login
+          </button>
+        </AuthCard>
+      </RegisterLayout>
+    );
+  }
 
   if (step === 1) {
     return (
@@ -98,28 +122,27 @@ export default function Register({ goto }) {
               );
             })}
           </div>
-          <button type="button" disabled={!role} onClick={() => { setError(''); setStep(2); }} className="w-full mt-5 rounded-xl bg-[#0a5cb8] hover:bg-[#084a96] text-white font-semibold py-3 text-[14px] transition disabled:opacity-40 disabled:cursor-not-allowed">Continue</button>
+          <button type="button" disabled={!role} onClick={() => { setError(''); setStep(2); }}
+            className="w-full mt-5 rounded-xl bg-[#0a5cb8] hover:bg-[#084a96] text-white font-semibold py-3 text-[14px] transition disabled:opacity-40 disabled:cursor-not-allowed">
+            Continue
+          </button>
           <div className="text-center text-[12.5px] text-navy-900/60 mt-5">Already have an account? <button type="button" className="font-semibold text-accent-700 hover:underline" onClick={() => goto('login')}>Login</button></div>
         </AuthCard>
       </RegisterLayout>
     );
   }
 
-  const chosen = ROLES.find(r => r.value === role);
   return (
     <RegisterLayout>
       <AuthCard className="max-w-[420px]">
         <h1 className="text-[28px] font-extrabold text-[#0a1490] text-center">Create Your Account</h1>
         <p className="text-center text-navy-900/70 text-[14px] mb-4">Enter your details to finish signing up</p>
-        <div className="flex items-center justify-between gap-2 rounded-xl bg-[#0a5cb8]/8 border border-[#0a5cb8]/20 px-3 py-2 mb-5 text-[12.5px]">
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-[#0a5cb8]/8 border border-[#0a5cb8]/20 px-3 py-2 mb-2 text-[12.5px]">
           <span className="text-navy-900/70">Registering as <b className="text-navy-900">{chosen?.title}</b></span>
           <button type="button" onClick={() => { setError(''); setStep(1); }} className="flex items-center gap-1 font-semibold text-accent-700 hover:underline"><ArrowLeft size={13} />Change</button>
         </div>
+        <p className="text-[11.5px] text-navy-900/50 mb-5 ml-1">Your account stays pending until an MDRRMO administrator approves it.</p>
         <form onSubmit={submit}>
-          {role === 'ADMIN_STAFF' && (
-            <Field className="mb-3"><Ctrl icon={<KeyRound size={16} />}><TextInput type="password" placeholder="Admin registration code" value={f.admin_code} onChange={set('admin_code')} autoComplete="off" /></Ctrl>
-              <p className="text-[11px] text-navy-900/50 mt-1 ml-1">Ask your MDRRMO administrator for this code.</p></Field>
-          )}
           <Field className="mb-3"><Ctrl icon={<User size={16} />}><TextInput placeholder="Full Name" value={f.full} onChange={set('full')} /></Ctrl></Field>
           <Field className="mb-3"><Ctrl icon={<Mail size={16} />}><TextInput type="email" placeholder="Email Address" value={f.email} onChange={set('email')} /></Ctrl></Field>
           <Field className="mb-3"><Ctrl icon={<AtSign size={16} />}><TextInput placeholder="Username" value={f.username} onChange={set('username')} autoComplete="username" /></Ctrl></Field>
@@ -131,7 +154,9 @@ export default function Register({ goto }) {
             <span>I agree to the <button type="button" className="font-semibold text-accent-700 underline" onClick={showLegal}>Terms of Service &amp; Privacy Policy</button></span>
           </label>
           {error && <div className="text-[12px] text-danger mb-3">{error}</div>}
-          <button type="submit" disabled={busy} className="w-full rounded-xl bg-[#0a5cb8] hover:bg-[#084a96] text-white font-semibold py-3 text-[14px] transition disabled:opacity-50">{busy ? 'Creating account…' : 'Sign Up'}</button>
+          <button type="submit" disabled={busy} className="w-full rounded-xl bg-[#0a5cb8] hover:bg-[#084a96] text-white font-semibold py-3 text-[14px] transition disabled:opacity-50">
+            {busy ? 'Submitting…' : 'Sign Up'}
+          </button>
         </form>
         <div className="text-center text-[12.5px] text-navy-900/60 mt-5">Already have an account? <button type="button" className="font-semibold text-accent-700 hover:underline" onClick={() => goto('login')}>Login</button></div>
       </AuthCard>
