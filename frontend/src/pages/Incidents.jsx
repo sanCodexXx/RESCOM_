@@ -1,3 +1,6 @@
+import { useAuth } from '../context/AuthContext.jsx';
+import { usePagination } from '../hooks/usePagination.js';
+import { Pagination, Skeleton, LoadError, EmptyState as SharedEmptyState } from '../components/ui/DataStates.jsx';
 import React, { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { PageHeader } from '../components/layout/Shell.jsx';
@@ -10,15 +13,23 @@ import { getSocket } from '../lib/socket.js';
 
 const STATUSES = ['Pending', 'En Route', 'Active', 'Resolved'];
 
-export default function Incidents() {
+export default function Incidents({ ctx }) {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'ADMIN_STAFF';
   const { toast, openModal, closeModal, openConfirm } = useUi();
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => { if (ctx?.quickAction === 'incident') newModal(); }, [ctx]);
+
+  const pager = usePagination(incidents, '');
 
   async function load() {
+    setLoadError('');
     setLoading(true);
     try { setIncidents(await api.get('/incidents')); }
-    catch (e) { toast(e.message, 'bad'); }
+    catch (e) { setLoadError(e.message); toast(e.message, 'bad'); }
     finally { setLoading(false); }
   }
 
@@ -47,11 +58,14 @@ export default function Incidents() {
     });
   }
 
-  async function cycleStatus(i) {
-    // Pending -> En Route -> Active -> Resolved. A resolved incident is reopened as Active (it never loops back to Pending).
-    const next = i.reporting_status === 'Resolved' ? 'Active' : STATUSES[STATUSES.indexOf(i.reporting_status) + 1];
-    try { await api.patch(`/incidents/${i.incident_id}/status`, { reporting_status: next }); toast(`Status → ${next}`, 'ok'); load(); }
-    catch (e) { toast(e.message, 'bad'); }
+  function cycleStatus(i) {
+    const index = STATUSES.indexOf(i.reporting_status);
+    const next = i.reporting_status === 'Resolved' ? 'Active' : STATUSES[index + 1] || 'Pending';
+    openConfirm({ title: 'Update incident status?',
+      msg: `<b>${i.disaster_name}</b> will change from ${i.reporting_status} to ${next}.`,
+      confirmLabel: `Mark ${next}`, variant: 'primary',
+      onConfirm: async () => { await api.patch(`/incidents/${i.incident_id}/status`, { reporting_status: next }); toast(`Incident marked ${next}`, 'ok'); load(); }
+    });
   }
 
   function remove(i) {
@@ -59,7 +73,7 @@ export default function Incidents() {
       title: 'Delete incident?',
       msg: `<b>${i.disaster_name}</b> will be permanently removed.`,
       onConfirm: async () => {
-        try { await api.del(`/incidents/${i.incident_id}`); toast('Incident deleted', 'bad'); load(); }
+        try { await api.del(`/incidents/${i.incident_id}`); toast('Incident deleted', 'ok'); load(); }
         catch (e) { toast(e.message, 'bad'); }
       }
     });
@@ -67,37 +81,40 @@ export default function Incidents() {
 
   return (
     <>
+      <LoadError message={loadError} onRetry={load} />
       <PageHeader title="Disaster Incidents" subtitle="Active and past incidents reported by field personnel and admin staff"
         actions={<Button onClick={newModal}><Plus size={14} />Log Incident</Button>} />
 
 
+      {loading && <Skeleton label="Loading incidents" />}
       <div className="glass rounded-glass shadow-glass-sm overflow-x-auto scroll-thin">
         <table className="w-full min-w-[760px] border-collapse">
           <thead>
-            <tr>{['Disaster', 'Type', 'Barangay', 'Severity', 'Status (click to advance)', 'Reported', ''].map(h => (
-              <th key={h} className="text-left text-[11px] uppercase tracking-wide text-navy-900/45 font-semibold px-4 py-3">{h}</th>
+            <tr>{['Disaster', 'Type', 'Barangay', 'Severity', 'Status', 'Reported', ''].map(h => (
+              <th key={h} className="text-left text-[0.6875rem] uppercase tracking-wide text-navy-900/45 font-semibold px-4 py-3">{h}</th>
             ))}</tr>
           </thead>
           <tbody>
-            {incidents.map(i => (
+            {pager.items.map(i => (
               <tr key={i.incident_id} className="border-b border-navy-900/8">
-                <td className="px-4 py-3 text-[12.5px] text-navy-900"><b>{i.disaster_name}</b></td>
-                <td className="px-4 py-3 text-[12.5px] text-navy-900/65">{i.disaster_type}</td>
-                <td className="px-4 py-3 text-[12.5px] text-navy-900/65">{i.brgy || '—'}</td>
+                <td className="px-4 py-3 text-[0.78125rem] text-navy-900"><b>{i.disaster_name}</b></td>
+                <td className="px-4 py-3 text-[0.78125rem] text-navy-900/65">{i.disaster_type}</td>
+                <td className="px-4 py-3 text-[0.78125rem] text-navy-900/65">{i.brgy || '—'}</td>
                 <td className="px-4 py-3"><Badge className={SEV_PILL[i.severity]}>{i.severity}</Badge></td>
                 <td className="px-4 py-3">
                   <button onClick={() => cycleStatus(i)}>
                     <Badge className={STATUS_PILL[i.reporting_status] + ' cursor-pointer hover:brightness-125'}>{i.reporting_status}</Badge>
                   </button>
                 </td>
-                <td className="px-4 py-3 text-[12px] text-navy-900/45">{new Date(i.date_started).toLocaleString()}</td>
-                <td className="px-4 py-3"><button onClick={() => remove(i)} className="text-navy-900/45 hover:text-danger"><Trash2 size={15} /></button></td>
+                <td className="px-4 py-3 text-[0.75rem] text-navy-900/45">{new Date(i.date_started).toLocaleString()}</td>
+                <td className="px-4 py-3">{isAdmin && <button aria-label={`Delete ${i.disaster_name}`} onClick={() => remove(i)} className="text-navy-900/45 hover:text-danger"><Trash2 size={15} /></button>}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {!loading && !incidents.length && <p className="text-navy-900/45 text-[12.5px] mt-4">No incidents logged yet.</p>}
+      {!loading && !loadError && !incidents.length && <SharedEmptyState title="No incidents logged" message="Log an incident to begin coordinating evacuation activity." action="Log incident" onAction={newModal} />}
+      {!loading && <Pagination pager={pager} />}
     </>
   );
 }

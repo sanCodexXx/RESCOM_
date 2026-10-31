@@ -1,21 +1,22 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { useAuth } from './context/AuthContext.jsx';
 import { ModalHost } from './components/ui/Modal.jsx';
 import { Toasts } from './components/ui/Toasts.jsx';
+import { Skeleton } from './components/ui/DataStates.jsx';
 import Shell from './components/layout/Shell.jsx';
 
 import Splash from './pages/Splash.jsx';
-import Login from './pages/auth/Login.jsx';
-import Register from './pages/auth/Register.jsx';
-import ForgotPassword from './pages/auth/ForgotPassword.jsx';
-import Dashboard from './pages/Dashboard.jsx';
-import Centers from './pages/Centers.jsx';
-import Evacuees from './pages/Evacuees.jsx';
-import PriorityCases from './pages/PriorityCases.jsx';
-import Incidents from './pages/Incidents.jsx';
-import DromicReports from './pages/DromicReports.jsx';
-import Users from './pages/Users.jsx';
-import Settings from './pages/Settings.jsx';
+const Login = lazy(() => import('./pages/auth/Login.jsx'));
+const Register = lazy(() => import('./pages/auth/Register.jsx'));
+const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword.jsx'));
+const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
+const Centers = lazy(() => import('./pages/Centers.jsx'));
+const Evacuees = lazy(() => import('./pages/Evacuees.jsx'));
+const PriorityCases = lazy(() => import('./pages/PriorityCases.jsx'));
+const Incidents = lazy(() => import('./pages/Incidents.jsx'));
+const DromicReports = lazy(() => import('./pages/DromicReports.jsx'));
+const Users = lazy(() => import('./pages/Users.jsx'));
+const Settings = lazy(() => import('./pages/Settings.jsx'));
 
 const PAGES = {
   dashboard: Dashboard,
@@ -51,7 +52,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const t = setTimeout(() => setShowSplash(false), 1600);
+    const t = setTimeout(() => setShowSplash(false), 400);
     return () => clearTimeout(t);
   }, []);
 
@@ -77,7 +78,7 @@ export default function App() {
       {loading ? (
         <div className="min-h-screen grid place-items-center text-navy-900/50 text-sm">Loading RESCOM…</div>
       ) : !user ? (
-        <AuthPage goto={setAuthView} />
+        <Suspense fallback={<Skeleton label="Loading sign-in" />}><AuthPage goto={setAuthView} /></Suspense>
       ) : (
         <Shell
           route={route}
@@ -87,7 +88,7 @@ export default function App() {
           onLogout={logout}
           role={user.role}
         >
-          <Page onNav={nav} ctx={ctx} />
+          <Suspense fallback={<Skeleton label="Loading page" />}><Page onNav={nav} ctx={ctx} /></Suspense>
         </Shell>
       )}
       {/* Always mounted regardless of auth state, so modals/toasts/the

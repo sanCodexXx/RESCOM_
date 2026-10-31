@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 
 function uid() { return 'T-' + Math.random().toString(36).slice(2, 8); }
 
@@ -10,24 +10,30 @@ export function UiProvider({ children }) {
   const [confirm, setConfirm] = useState(null);
   const [success, setSuccess] = useState(null);
 
+  const timers = useRef(new Set());
+  useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
+  const dismissToast = useCallback(id => setToasts(t => t.filter(x => x.id !== id)), []);
   const toast = useCallback((msg, kind = 'ok') => {
     const id = uid();
-    setToasts((t) => [...t, { id, msg, kind }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2800);
+    setToasts(t => [...t.slice(-3), { id, msg, kind }]);
+    const timer = setTimeout(() => { dismissToast(id); timers.current.delete(timer); }, kind === 'bad' ? 10000 : 6000);
+    timers.current.add(timer);
   }, []);
 
   const openModal = useCallback((cfg) => setModal(cfg), []);
   const closeModal = useCallback(() => setModal(null), []);
   const openConfirm = useCallback((cfg) => setConfirm(cfg), []);
   const closeConfirm = useCallback(() => setConfirm(null), []);
-  // Animated green-check confirmation modal. Auto-dismisses after
-  // `duration` ms (default 1.8s); tapping Cancel/backdrop closes it early.
-  const openSuccess = useCallback((cfg) => setSuccess(typeof cfg === 'string' ? { title: cfg } : cfg), []);
+  // Compatibility helper: routine success feedback uses a nonblocking toast.
+  const openSuccess = useCallback(cfg => {
+    const value = typeof cfg === 'string' ? { title: cfg } : cfg;
+    toast([value.title, value.message].filter(Boolean).join(' '), 'ok');
+  }, [toast]);
   const closeSuccess = useCallback(() => setSuccess(null), []);
 
   return (
     <UiContext.Provider value={{
-      toasts, toast,
+      toasts, toast, dismissToast,
       modal, openModal, closeModal,
       confirm, openConfirm, closeConfirm,
       success, openSuccess, closeSuccess

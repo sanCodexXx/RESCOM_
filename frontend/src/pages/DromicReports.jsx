@@ -1,3 +1,6 @@
+import { useAuth } from '../context/AuthContext.jsx';
+import { usePagination } from '../hooks/usePagination.js';
+import { Pagination, Skeleton, LoadError, EmptyState as SharedEmptyState } from '../components/ui/DataStates.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import { Plus, FileBarChart, Users, Building2, ShieldAlert, Download, Lock, FileSpreadsheet, Activity, CheckCircle, AlertTriangle, ArrowUp, ArrowDown } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell, PieChart, Pie } from 'recharts';
@@ -24,7 +27,7 @@ const PERIODS = [
 const BAR = '#4F6FE8';
 const PEAK = '#1B1464';
 const PALETTE = ['#4F6FE8', '#F59E0B', '#EF4444', '#16A34A', '#94A3B8', '#8B5CF6', '#0EA5E9', '#DB2777', '#64748B'];
-const dateInput = 'rounded-xl border border-navy-900/15 bg-white px-3 py-2 text-[13px] text-navy-900';
+const dateInput = 'min-w-0 max-w-full rounded-xl border border-navy-900/15 bg-white px-3 py-2 text-[0.8125rem] text-navy-900';
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -90,6 +93,8 @@ function savePng(container, filename) {
 }
 
 export default function DromicReports() {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'ADMIN_STAFF';
   const { toast, openModal, closeModal, openConfirm } = useUi();
 
   // Dashboard filters
@@ -102,19 +107,21 @@ export default function DromicReports() {
   // Dashboard data (live from the database)
   const [overview, setOverview] = useState(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
+  const [overviewError, setOverviewError] = useState('');
 
   // Per-incident DROMIC reports
   const [reports, setReports] = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [listLoading, setListLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   async function loadOverview() {
     if (invalid) { setOverview(null); setOverviewLoading(false); return; }
-    setOverviewLoading(true);
+    setOverviewLoading(true); setOverviewError('');
     try {
       const qs = new URLSearchParams({ from, to, ...(brgy ? { brgy } : {}) });
       setOverview(await api.get(`/analytics/overview?${qs}`));
-    } catch (e) { toast(e.message, 'bad'); }
+    } catch (e) { setOverviewError(e.message); toast(e.message, 'bad'); }
     finally { setOverviewLoading(false); }
   }
   // Socket handlers run with whatever filters were current when they were attached, so they call through a ref.
@@ -122,10 +129,11 @@ export default function DromicReports() {
   overviewRef.current = loadOverview;
 
   async function loadReports() {
+    setListLoading(true); setLoadError('');
     try {
       const [r, i] = await Promise.all([api.get('/dromic'), api.get('/incidents')]);
       setReports(r); setIncidents(i);
-    } catch (e) { toast(e.message, 'bad'); }
+    } catch (e) { setLoadError(e.message); toast(e.message, 'bad'); }
     finally { setListLoading(false); }
   }
 
@@ -139,6 +147,8 @@ export default function DromicReports() {
     events.forEach(e => s.on(e, refresh));
     return () => events.forEach(e => s.off(e, refresh));
   }, []);
+
+  const pager = usePagination(reports, '');
 
   // ---------- period report (the Generate Report button) ----------
 
@@ -211,30 +221,30 @@ export default function DromicReports() {
               <MiniStat icon={<Building2 size={16} />} label="Centers in use" value={t.centers_now} />
               <MiniStat icon={<ShieldAlert size={16} />} label="Vulnerable" value={(data.profile?.vulnerable || []).reduce((a, v) => a + v.n, 0)} />
             </div>
-            <b className="text-navy-900 text-[13px] block mb-2">Inside Evacuation Centers</b>
-            <div className="text-[11px] grid grid-cols-[1fr_auto_auto] gap-x-4 text-navy-900/45 px-1 pb-1"><span>Center</span><span>Families now / cum</span><span>Persons now / cum</span></div>
+            <b className="text-navy-900 text-[0.8125rem] block mb-2">Inside Evacuation Centers</b>
+            <div className="text-[0.6875rem] grid grid-cols-[1fr_auto_auto] gap-x-4 text-navy-900/45 px-1 pb-1"><span>Center</span><span>Families now / cum</span><span>Persons now / cum</span></div>
             {(data.centers || []).map(c => (
-              <div key={c.center_id} className="grid grid-cols-[1fr_auto_auto] gap-x-4 text-[12.5px] py-2 border-b border-navy-900/10 px-1">
+              <div key={c.center_id} className="grid grid-cols-[1fr_auto_auto] gap-x-4 text-[0.78125rem] py-2 border-b border-navy-900/10 px-1">
                 <span className="text-navy-900/80 min-w-0 truncate">{c.center_name}</span>
                 <span className="text-navy-900/60 text-right">{c.families_now} / {c.families_cum}</span>
                 <span className="text-navy-900/60 text-right">{c.persons_now} / {c.persons_cum}</span>
               </div>
             ))}
-            {!data.centers?.length && <p className="text-navy-900/45 text-[12.5px]">No evacuees registered under this incident yet.</p>}
-            <b className="text-navy-900 text-[13px] block mt-4 mb-2">Affected, by Barangay of Origin</b>
+            {!data.centers?.length && <p className="text-navy-900/45 text-[0.78125rem]">No evacuees registered under this incident yet.</p>}
+            <b className="text-navy-900 text-[0.8125rem] block mt-4 mb-2">Affected, by Barangay of Origin</b>
             {(data.byOrigin || []).map(b => (
-              <div key={b.barangay} className="flex justify-between text-[12.5px] py-1.5 border-b border-navy-900/10 px-1">
+              <div key={b.barangay} className="flex justify-between text-[0.78125rem] py-1.5 border-b border-navy-900/10 px-1">
                 <span className="text-navy-900/80">{b.barangay}</span>
                 <span className="text-navy-900/55">{b.families} fam · {b.persons} persons</span>
               </div>
             ))}
             {r.field_remarks && (
               <div className="mt-4">
-                <b className="text-navy-900 text-[13px] block mb-1.5">Field Remarks</b>
-                <p className="text-navy-900/65 text-[12.5px] leading-relaxed">{r.field_remarks}</p>
+                <b className="text-navy-900 text-[0.8125rem] block mb-1.5">Field Remarks</b>
+                <p className="text-navy-900/65 text-[0.78125rem] leading-relaxed">{r.field_remarks}</p>
               </div>
             )}
-            <p className="text-[11px] text-navy-900/45 mt-4">The Excel file is the official DSWD DROMIC template, filled in and ready to edit. The PDF follows the same DROMIC layout.</p>
+            <p className="text-[0.6875rem] text-navy-900/45 mt-4">The Excel file is the official DSWD DROMIC template, filled in and ready to edit. The PDF follows the same DROMIC layout.</p>
           </div>
         ),
         footer: <>
@@ -274,6 +284,9 @@ export default function DromicReports() {
 
   return (
     <>
+      {listLoading && <Skeleton label="Loading reports" />}
+      <LoadError message={overviewError} onRetry={loadOverview} />
+      <LoadError message={loadError} onRetry={loadReports} />
       <PageHeader
         title="DROMIC Reports"
         subtitle="Trends, performance metrics and downloadable reports"
@@ -284,29 +297,29 @@ export default function DromicReports() {
       <div className="glass rounded-glass shadow-glass-sm p-3 mb-2 flex flex-wrap items-center gap-2">
         {PERIODS.map(p => (
           <button key={p.key} type="button" onClick={() => setPeriod(p.key)}
-            className={`px-4 py-2 rounded-xl text-[13px] font-semibold border transition ${period === p.key ? 'bg-accent-600 text-white border-transparent' : 'bg-white text-navy-900/75 border-navy-900/15 hover:bg-navy-900/5'}`}>
+            className={`px-4 py-2 rounded-xl text-[0.8125rem] font-semibold border transition ${period === p.key ? 'bg-accent-600 text-white border-transparent' : 'bg-white text-navy-900/75 border-navy-900/15 hover:bg-navy-900/5'}`}>
             {p.label}
           </button>
         ))}
         {period === 'custom' && (
-          <div className="flex items-center gap-2">
-            <input type="date" value={custom[0]} onChange={e => setCustom([e.target.value, custom[1]])} className={dateInput} />
-            <span className="text-navy-900/40 text-[13px]">to</span>
-            <input type="date" value={custom[1]} onChange={e => setCustom([custom[0], e.target.value])} className={dateInput} />
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <input aria-label="From date" type="date" value={custom[0]} onChange={e => setCustom([e.target.value, custom[1]])} className={dateInput} />
+            <span className="text-navy-900/40 text-[0.8125rem]">to</span>
+            <input aria-label="To date" type="date" value={custom[1]} onChange={e => setCustom([custom[0], e.target.value])} className={dateInput} />
           </div>
         )}
-        <select value={brgy} onChange={e => setBrgy(e.target.value)} className={`ml-auto ${dateInput}`}>
+        <select aria-label="Filter by barangay" value={brgy} onChange={e => setBrgy(e.target.value)} className={`ml-auto ${dateInput}`}>
           <option value="">All barangays</option>
           {BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
         </select>
       </div>
-      <p className="text-[12px] text-navy-900/55 mb-4">
+      <p className="text-[0.75rem] text-navy-900/55 mb-4">
         {invalid
           ? 'Choose a From date on or before the To date.'
           : `Showing ${fmtDay(from)} – ${fmtDay(to)}${overview ? `, compared with ${fmtDay(overview.period.prevFrom)} – ${fmtDay(overview.period.prevTo)}` : ''}.`}
       </p>
 
-      {!invalid && overviewLoading && !overview && <p className="text-navy-900/45 text-[12.5px] mb-4">Loading analytics…</p>}
+      {!invalid && overviewLoading && !overview && <Skeleton label="Loading analytics" rows={3} />}
 
       {!invalid && overview && (
         <>
@@ -320,7 +333,7 @@ export default function DromicReports() {
             </KpiCard>
             <KpiCard tone="green" icon={<Activity size={20} />} label="Avg. Response Time" value={k.responseMinutes.value == null ? '—' : `${Math.round(k.responseMinutes.value)} min`}>
               <ResponseDelta cur={k.responseMinutes.value} prev={k.responseMinutes.prev} />
-              <div className="text-[11px] text-navy-900/45 mt-0.5">Logged to first evacuee registered</div>
+              <div className="text-[0.6875rem] text-navy-900/45 mt-0.5">Logged to first evacuee registered</div>
             </KpiCard>
             <KpiCard tone="amber" icon={<CheckCircle size={20} />} label="Resolution Rate" value={k.resolution.total ? `${Math.round((k.resolution.resolved / k.resolution.total) * 100)}%` : '—'}>
               <span className="text-navy-900/55">{k.resolution.resolved} of {k.resolution.total} incidents resolved</span>
@@ -344,8 +357,8 @@ export default function DromicReports() {
       {/* Per-incident DROMIC reports */}
       <div className="flex flex-wrap items-end justify-between gap-3 mt-8 mb-3">
         <div>
-          <h2 className="text-[17px] font-bold text-navy-900 m-0">Incident DROMIC Reports</h2>
-          <p className="text-[12.5px] text-navy-900/55 mt-0.5">One numbered report per disaster incident, with its own status</p>
+          <h2 className="text-[1.0625rem] font-bold text-navy-900 m-0">Incident DROMIC Reports</h2>
+          <p className="text-[0.78125rem] text-navy-900/55 mt-0.5">One numbered report per disaster incident, with its own status</p>
         </div>
         <Button onClick={newIncidentReport}><Plus size={14} />New incident report</Button>
       </div>
@@ -354,23 +367,23 @@ export default function DromicReports() {
         <table className="w-full min-w-[820px] border-collapse">
           <thead>
             <tr>{['Report', 'Disaster', 'Barangay', 'As of', 'Prepared By', 'Status', ''].map(h => (
-              <th key={h} className="text-left text-[11px] uppercase tracking-wide text-navy-900/45 font-semibold px-4 py-3">{h}</th>
+              <th key={h} className="text-left text-[0.6875rem] uppercase tracking-wide text-navy-900/45 font-semibold px-4 py-3">{h}</th>
             ))}</tr>
           </thead>
           <tbody>
-            {reports.map(r => (
+            {pager.items.map(r => (
               <tr key={r.report_id} className="border-b border-navy-900/8 cursor-pointer hover:bg-navy-900/4" onClick={() => viewSummary(r)}>
-                <td className="px-4 py-3 text-[12.5px] text-navy-900"><b>#{r.report_no ?? r.report_id}</b></td>
-                <td className="px-4 py-3 text-[12.5px] text-navy-900"><b>{r.disaster_name || '—'}</b></td>
-                <td className="px-4 py-3 text-[12.5px] text-navy-900/65">{r.brgy || '—'}</td>
-                <td className="px-4 py-3 text-[12px] text-navy-900/55">{fmtAsOf(r.as_of || r.report_date)}</td>
-                <td className="px-4 py-3 text-[12.5px] text-navy-900/65">{r.author_first} {r.author_last}</td>
+                <td className="px-4 py-3 text-[0.78125rem] text-navy-900"><b>#{r.report_no ?? r.report_id}</b></td>
+                <td className="px-4 py-3 text-[0.78125rem] text-navy-900"><b>{r.disaster_name || '—'}</b></td>
+                <td className="px-4 py-3 text-[0.78125rem] text-navy-900/65">{r.brgy || '—'}</td>
+                <td className="px-4 py-3 text-[0.75rem] text-navy-900/55">{fmtAsOf(r.as_of || r.report_date)}</td>
+                <td className="px-4 py-3 text-[0.78125rem] text-navy-900/65">{r.author_first} {r.author_last}</td>
                 <td className="px-4 py-3"><Badge className={STATUS_PILL[r.reporting_status]}>{STATUS_LABEL[r.reporting_status]}</Badge></td>
                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                   <div className="flex gap-1.5 items-center">
-                    {r.reporting_status === 'Draft' && <Button size="sm" variant="ghost" onClick={() => setStatus(r, 'Active')}>Activate</Button>}
-                    {r.reporting_status === 'Active' && <Button size="sm" variant="ghost" onClick={() => finalize(r)}>Finalize</Button>}
-                    {r.reporting_status === 'Finalized' && <span className="flex items-center gap-1 text-[11px] text-navy-900/45 px-1"><Lock size={12} />Locked</span>}
+                    {isAdmin && r.reporting_status === 'Draft' && <Button size="sm" variant="ghost" onClick={() => setStatus(r, 'Active')}>Activate</Button>}
+                    {isAdmin && r.reporting_status === 'Active' && <Button size="sm" variant="ghost" onClick={() => finalize(r)}>Finalize</Button>}
+                    {r.reporting_status === 'Finalized' && <span className="flex items-center gap-1 text-[0.6875rem] text-navy-900/45 px-1"><Lock size={12} />Locked</span>}
                     <Button size="sm" variant="ghost" onClick={() => downloadExcel(r)}><FileSpreadsheet size={13} />Excel</Button>
                     <Button size="sm" variant="ghost" onClick={() => downloadPdf(r)}><Download size={13} />PDF</Button>
                   </div>
@@ -380,7 +393,8 @@ export default function DromicReports() {
           </tbody>
         </table>
       </div>
-      {!listLoading && !reports.length && <p className="text-navy-900/45 text-[12.5px] mt-4">No DROMIC reports generated yet.</p>}
+      {!listLoading && !loadError && !reports.length && <SharedEmptyState title="No DROMIC reports yet" message="Use Generate Report above to prepare a report for the selected period or incident." />}
+      {!listLoading && <Pagination pager={pager} />}
     </>
   );
 }
@@ -400,9 +414,9 @@ function KpiCard({ tone, icon, label, value, children }) {
     <div className="glass rounded-glass shadow-glass-sm p-5 flex gap-4">
       <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${t.box} ${t.fg}`}>{icon}</div>
       <div className="min-w-0">
-        <div className={`text-[12.5px] font-semibold ${t.fg}`}>{label}</div>
-        <div className="text-[28px] font-bold text-navy-900 leading-tight">{value}</div>
-        <div className="text-[12px] mt-0.5">{children}</div>
+        <div className={`text-[0.78125rem] font-semibold ${t.fg}`}>{label}</div>
+        <div className="text-[1.75rem] font-bold text-navy-900 leading-tight">{value}</div>
+        <div className="text-[0.75rem] mt-0.5">{children}</div>
       </div>
     </div>
   );
@@ -434,7 +448,7 @@ function Panel({ title, action, children }) {
   return (
     <div className="glass rounded-glass shadow-glass-sm p-5 h-full">
       <div className="flex items-center justify-between gap-3 mb-3">
-        <h3 className="font-bold text-[15px] text-navy-900 m-0">{title}</h3>
+        <h3 className="font-bold text-[0.9375rem] text-navy-900 m-0">{title}</h3>
         {action}
       </div>
       {children}
@@ -443,7 +457,7 @@ function Panel({ title, action, children }) {
 }
 
 function Empty({ children }) {
-  return <p className="text-navy-900/45 text-[12.5px] py-10 text-center">{children}</p>;
+  return <p className="text-navy-900/45 text-[0.78125rem] py-10 text-center">{children}</p>;
 }
 
 function MonthlyChart({ data }) {
@@ -454,7 +468,7 @@ function MonthlyChart({ data }) {
       title="Incidents Reported"
       action={
         <button type="button" onClick={() => savePng(ref.current, 'incidents-reported.png')}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-navy-900/15 bg-white px-3 py-1.5 text-[12px] font-semibold text-navy-900/75 hover:bg-navy-900/5">
+          className="inline-flex items-center gap-1.5 rounded-xl border border-navy-900/15 bg-white px-3 py-1.5 text-[0.75rem] font-semibold text-navy-900/75 hover:bg-navy-900/5">
           <Download size={13} />PNG
         </button>
       }
@@ -493,13 +507,13 @@ function TypeDonut({ data, total }) {
               </PieChart>
             </ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <b className="text-[24px] text-navy-900 leading-none">{total}</b>
-              <span className="text-[11.5px] text-navy-900/50 mt-1">reports</span>
+              <b className="text-[1.5rem] text-navy-900 leading-none">{total}</b>
+              <span className="text-[0.71875rem] text-navy-900/50 mt-1">reports</span>
             </div>
           </div>
           <ul className="space-y-2.5">
             {data.map((d, i) => (
-              <li key={d.type} className="flex items-center gap-2 text-[13px]">
+              <li key={d.type} className="flex items-center gap-2 text-[0.8125rem]">
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PALETTE[i % PALETTE.length] }} />
                 <span className="flex-1 text-navy-900/80 truncate">{d.type}</span>
                 <b className="text-navy-900">{Math.round(d.pct)}%</b>
@@ -541,7 +555,7 @@ function BarangayBars({ data }) {
       <ul className="space-y-4">
         {data.map(b => (
           <li key={b.barangay}>
-            <div className="flex items-baseline justify-between gap-2 text-[13px]">
+            <div className="flex items-baseline justify-between gap-2 text-[0.8125rem]">
               <span className="text-navy-900/85 font-semibold truncate" title={b.barangay}>{shortName(b.barangay)}</span>
               <span className="text-navy-900/60 shrink-0">{b.persons} persons · {b.families} families</span>
             </div>
@@ -593,13 +607,13 @@ function PeriodReportForm({ form }) {
         <div className="flex gap-2">
           {[['pdf', 'PDF'], ['xlsx', 'Excel'], ['csv', 'CSV']].map(([v, label]) => (
             <button key={v} type="button" onClick={() => { setFormat(v); form.format = v; }}
-              className={`px-4 py-2 rounded-xl text-[13px] font-semibold border transition ${format === v ? 'bg-accent-600 text-white border-transparent' : 'bg-white text-navy-900/75 border-navy-900/15'}`}>
+              className={`px-4 py-2 rounded-xl text-[0.8125rem] font-semibold border transition ${format === v ? 'bg-accent-600 text-white border-transparent' : 'bg-white text-navy-900/75 border-navy-900/15'}`}>
               {label}
             </button>
           ))}
         </div>
       </Field>
-      <p className="text-[11.5px] text-navy-900/55">
+      <p className="text-[0.71875rem] text-navy-900/55">
         Covers {form.brgy ? `barangay ${form.brgy}` : 'all barangays'}. The figures are read from the live records when you generate the file.
       </p>
     </>
@@ -615,7 +629,7 @@ function GenerateForm({ incidents, reports, form }) {
         <Ctrl><Select value={incidentId} onChange={e => { setIncidentId(e.target.value); form.incident_id = e.target.value; }}>
           {incidents.map(i => <option key={i.incident_id} value={i.incident_id}>{i.disaster_name} — {i.brgy || 'San Nicolas'}</option>)}
         </Select></Ctrl>
-        <p className="text-[11.5px] text-navy-900/55 mt-1.5">This will be <b>DROMIC Report #{next}</b> for the selected incident.</p>
+        <p className="text-[0.71875rem] text-navy-900/55 mt-1.5">This will be <b>DROMIC Report #{next}</b> for the selected incident.</p>
       </Field>
       <Field label="Field Remarks (optional)">
         <Ctrl><TextArea placeholder="Relief distribution status, ongoing needs, notes for the record…" onChange={e => (form.field_remarks = e.target.value)} /></Ctrl>
@@ -628,8 +642,8 @@ function MiniStat({ icon, label, value }) {
   return (
     <div className="glass rounded-xl p-3.5 text-center">
       <div className="text-accent-400 flex justify-center mb-1.5">{icon}</div>
-      <div className="text-[20px] font-bold text-navy-900">{value ?? 0}</div>
-      <div className="text-[10.5px] text-navy-900/45">{label}</div>
+      <div className="text-[1.25rem] font-bold text-navy-900">{value ?? 0}</div>
+      <div className="text-[0.65625rem] text-navy-900/45">{label}</div>
     </div>
   );
 }

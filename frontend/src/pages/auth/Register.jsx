@@ -10,16 +10,16 @@ import { normalizePhPhone, stripPhoneChars } from '../../lib/barangays.js';
 const LEGAL_BODY = (
   <div className="max-h-[50vh] overflow-y-auto scroll-thin pr-1 space-y-5">
     <div>
-      <b className="text-navy-900 text-[13.5px] block mb-1.5">Terms of Service</b>
-      <p className="text-[13px] leading-relaxed text-navy-900/75">
+      <b className="text-navy-900 text-[0.84375rem] block mb-1.5">Terms of Service</b>
+      <p className="text-[0.8125rem] leading-relaxed text-navy-900/75">
         This system is for authorized MDRRMO San Nicolas personnel and partners. Submit accurate reports
         only, keep your credentials private, and use evacuee data solely for disaster response coordination.
         Accounts that misuse the system may be disabled by Admin Staff without notice.
       </p>
     </div>
     <div>
-      <b className="text-navy-900 text-[13.5px] block mb-1.5">Privacy Policy</b>
-      <p className="text-[13px] leading-relaxed text-navy-900/75">
+      <b className="text-navy-900 text-[0.84375rem] block mb-1.5">Privacy Policy</b>
+      <p className="text-[0.8125rem] leading-relaxed text-navy-900/75">
         We store your name, email, username, phone number and activity needed to coordinate evacuations.
         Evacuee records are visible only to signed-in staff and are never sold or shared outside disaster
         response and DROMIC reporting. You may request corrections to your account details at any time.
@@ -86,13 +86,13 @@ export default function Register({ goto }) {
       <RegisterLayout>
         <AuthCard className="max-w-[420px] text-center">
           <span className="mx-auto w-14 h-14 rounded-full bg-warn-bg text-warn grid place-items-center"><Clock size={26} /></span>
-          <h1 className="text-[26px] font-extrabold text-[#0a1490] mt-4">Request Submitted</h1>
-          <p className="text-navy-900/70 text-[14px] leading-relaxed mt-3">
+          <h1 className="text-[1.625rem] font-extrabold text-[#0a1490] mt-4">Request Submitted</h1>
+          <p className="text-navy-900/70 text-[0.875rem] leading-relaxed mt-3">
             Thank you, <b className="text-navy-900">{submitted.name}</b>. Your <b className="text-navy-900">{submitted.title}</b> account is waiting for approval from an MDRRMO administrator.
           </p>
-          <p className="text-navy-900/55 text-[12.5px] mt-2">You can log in once it has been approved.</p>
+          <p className="text-navy-900/55 text-[0.78125rem] mt-2">You can log in once it has been approved.</p>
           <button type="button" onClick={() => goto('login')}
-            className="w-full mt-6 rounded-xl bg-[#0a5cb8] hover:bg-[#084a96] text-white font-semibold py-3 text-[14px] transition">
+            className="w-full mt-6 rounded-xl bg-[#0a5cb8] hover:bg-[#084a96] text-white font-semibold py-3 text-[0.875rem] transition">
             Back to Login
           </button>
         </AuthCard>
@@ -104,8 +104,8 @@ export default function Register({ goto }) {
     return (
       <RegisterLayout>
         <AuthCard className="max-w-[420px]">
-          <h1 className="text-[28px] font-extrabold text-[#0a1490] text-center">Choose Your Role</h1>
-          <p className="text-center text-navy-900/70 text-[14px] mb-6">Select how you will use RESCOM</p>
+          <h1 className="text-[1.75rem] font-extrabold text-[#0a1490] text-center">Choose Your Role</h1>
+          <p className="text-center text-navy-900/70 text-[0.875rem] mb-6">Select how you will use RESCOM</p>
           <div role="radiogroup" aria-label="Account role" className="space-y-3">
             {ROLES.map(r => {
               const Icon = r.icon, on = role === r.value;
@@ -114,8 +114,8 @@ export default function Register({ goto }) {
                   <input type="radio" name="role" value={r.value} checked={on} onChange={() => setRole(r.value)} className="sr-only" />
                   <span className={`w-10 h-10 rounded-full grid place-items-center shrink-0 ${on ? 'bg-[#0a5cb8] text-white' : 'bg-navy-900/6 text-navy-900/60'}`}><Icon size={19} /></span>
                   <span className="flex-1 min-w-0">
-                    <b className="block text-[14.5px] text-navy-900">{r.title}</b>
-                    <span className="block text-[12px] leading-relaxed text-navy-900/60 mt-0.5">{r.desc}</span>
+                    <b className="block text-[0.90625rem] text-navy-900">{r.title}</b>
+                    <span className="block text-[0.75rem] leading-relaxed text-navy-900/60 mt-0.5">{r.desc}</span>
                   </span>
                   <span className={`w-5 h-5 rounded-full border-2 shrink-0 mt-1 grid place-items-center ${on ? 'border-[#0a5cb8]' : 'border-navy-900/25'}`}>{on && <span className="w-2.5 h-2.5 rounded-full bg-[#0a5cb8]" />}</span>
                 </label>
@@ -123,10 +123,10 @@ export default function Register({ goto }) {
             })}
           </div>
           <button type="button" disabled={!role} onClick={() => { setError(''); setStep(2); }}
-            className="w-full mt-5 rounded-xl bg-[#0a5cb8] hover:bg-[#084a96] text-white font-semibold py-3 text-[14px] transition disabled:opacity-40 disabled:cursor-not-allowed">
+            className="w-full mt-5 rounded-xl bg-[#0a5cb8] hover:bg-[#084a96] text-white font-semibold py-3 text-[0.875rem] transition disabled:opacity-40 disabled:cursor-not-allowed">
             Continue
           </button>
-          <div className="text-center text-[12.5px] text-navy-900/60 mt-5">Already have an account? <button type="button" className="font-semibold text-accent-700 hover:underline" onClick={() => goto('login')}>Login</button></div>
+          <div className="text-center text-[0.78125rem] text-navy-900/60 mt-5">Already have an account? <button type="button" className="font-semibold text-accent-700 hover:underline" onClick={() => goto('login')}>Login</button></div>
         </AuthCard>
       </RegisterLayout>
     );
@@ -135,13 +135,13 @@ export default function Register({ goto }) {
   return (
     <RegisterLayout>
       <AuthCard className="max-w-[420px]">
-        <h1 className="text-[28px] font-extrabold text-[#0a1490] text-center">Create Your Account</h1>
-        <p className="text-center text-navy-900/70 text-[14px] mb-4">Enter your details to finish signing up</p>
-        <div className="flex items-center justify-between gap-2 rounded-xl bg-[#0a5cb8]/8 border border-[#0a5cb8]/20 px-3 py-2 mb-2 text-[12.5px]">
+        <h1 className="text-[1.75rem] font-extrabold text-[#0a1490] text-center">Create Your Account</h1>
+        <p className="text-center text-navy-900/70 text-[0.875rem] mb-4">Enter your details to finish signing up</p>
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-[#0a5cb8]/8 border border-[#0a5cb8]/20 px-3 py-2 mb-2 text-[0.78125rem]">
           <span className="text-navy-900/70">Registering as <b className="text-navy-900">{chosen?.title}</b></span>
           <button type="button" onClick={() => { setError(''); setStep(1); }} className="flex items-center gap-1 font-semibold text-accent-700 hover:underline"><ArrowLeft size={13} />Change</button>
         </div>
-        <p className="text-[11.5px] text-navy-900/50 mb-5 ml-1">Your account stays pending until an MDRRMO administrator approves it.</p>
+        <p className="text-[0.71875rem] text-navy-900/50 mb-5 ml-1">Your account stays pending until an MDRRMO administrator approves it.</p>
         <form onSubmit={submit}>
           <Field className="mb-3"><Ctrl icon={<User size={16} />}><TextInput placeholder="Full Name" value={f.full} onChange={set('full')} /></Ctrl></Field>
           <Field className="mb-3"><Ctrl icon={<Mail size={16} />}><TextInput type="email" placeholder="Email Address" value={f.email} onChange={set('email')} /></Ctrl></Field>
@@ -149,16 +149,16 @@ export default function Register({ goto }) {
           <Field className="mb-3"><Ctrl icon={<Phone size={16} />}><TextInput type="tel" inputMode="tel" autoComplete="tel" maxLength={17} placeholder="Phone Number (+63 9XX XXX XXXX, optional)" value={f.phone} onChange={e => setF(s => ({ ...s, phone: stripPhoneChars(e.target.value) }))} /></Ctrl></Field>
           <Field className="mb-3"><Ctrl icon={<Lock size={16} />}><TextInput type={show ? 'text' : 'password'} placeholder="Password" value={f.password} onChange={set('password')} autoComplete="new-password" />{eye(show, setShow)}</Ctrl></Field>
           <Field className="mb-3"><Ctrl icon={<Lock size={16} />}><TextInput type={show2 ? 'text' : 'password'} placeholder="Confirm Password" value={f.confirm} onChange={set('confirm')} autoComplete="new-password" />{eye(show2, setShow2)}</Ctrl></Field>
-          <label className="flex items-start gap-2 text-[12px] text-navy-900/70 mb-3 cursor-pointer">
+          <label className="flex items-start gap-2 text-[0.75rem] text-navy-900/70 mb-3 cursor-pointer">
             <input type="checkbox" checked={agree} onChange={e => setAgree(e.target.checked)} className="w-4 h-4 mt-0.5 accent-[#0a1490]" />
             <span>I agree to the <button type="button" className="font-semibold text-accent-700 underline" onClick={showLegal}>Terms of Service &amp; Privacy Policy</button></span>
           </label>
-          {error && <div className="text-[12px] text-danger mb-3">{error}</div>}
-          <button type="submit" disabled={busy} className="w-full rounded-xl bg-[#0a5cb8] hover:bg-[#084a96] text-white font-semibold py-3 text-[14px] transition disabled:opacity-50">
+          {error && <div className="text-[0.75rem] text-danger mb-3">{error}</div>}
+          <button type="submit" disabled={busy} className="w-full rounded-xl bg-[#0a5cb8] hover:bg-[#084a96] text-white font-semibold py-3 text-[0.875rem] transition disabled:opacity-50">
             {busy ? 'Submitting…' : 'Sign Up'}
           </button>
         </form>
-        <div className="text-center text-[12.5px] text-navy-900/60 mt-5">Already have an account? <button type="button" className="font-semibold text-accent-700 hover:underline" onClick={() => goto('login')}>Login</button></div>
+        <div className="text-center text-[0.78125rem] text-navy-900/60 mt-5">Already have an account? <button type="button" className="font-semibold text-accent-700 hover:underline" onClick={() => goto('login')}>Login</button></div>
       </AuthCard>
     </RegisterLayout>
   );

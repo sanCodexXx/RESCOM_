@@ -1,3 +1,6 @@
+import { useAuth } from '../context/AuthContext.jsx';
+import { usePagination } from '../hooks/usePagination.js';
+import { Pagination, Skeleton, LoadError, EmptyState as SharedEmptyState } from '../components/ui/DataStates.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 
 import {
@@ -68,6 +71,7 @@ const STATUS_OPTIONS = [
 ];
 
 const INITIAL_FORM = {
+  family_id: '',
   family_name: '',
   barangay: '',
   contact_number: '',
@@ -135,15 +139,15 @@ function validateEvacuee(form, { full = true } = {}) {
   }
 
   if (full) {
-    if (!form.family_name.trim()) {
+    if (!form.family_id && !form.family_name.trim()) {
       errors.family_name = 'Family name is required.';
     }
 
-    if (!BARANGAYS.includes(form.barangay)) {
+    if (!form.family_id && !BARANGAYS.includes(form.barangay)) {
       errors.barangay = 'Select a barangay.';
     }
 
-    if (!normalizePhPhone(form.contact_number)) {
+    if (!form.family_id && !normalizePhPhone(form.contact_number)) {
       errors.contact_number =
         'Enter a valid Philippine mobile number.';
     }
@@ -211,15 +215,15 @@ function SummaryCard({
 
         <div className="min-w-0">
 
-          <p className="text-[12px] font-semibold text-navy-900/55">
+          <p className="text-[0.75rem] font-semibold text-navy-900/55">
             {title}
           </p>
 
-          <p className="text-[28px] font-bold tracking-tight text-navy-900 mt-2 leading-tight">
+          <p className="text-[1.75rem] font-bold tracking-tight text-navy-900 mt-2 leading-tight">
             {value}
           </p>
 
-          <p className="text-[11px] text-navy-900/45 mt-2">
+          <p className="text-[0.6875rem] text-navy-900/45 mt-2">
             {description}
           </p>
 
@@ -293,13 +297,13 @@ function EmptyState({
         )}
       </div>
 
-      <h3 className="text-[15px] font-bold text-navy-900">
+      <h3 className="text-[0.9375rem] font-bold text-navy-900">
         {hasSearch
           ? 'No matching evacuees'
           : 'No evacuees registered'}
       </h3>
 
-      <p className="text-[12px] text-navy-900/50 mt-2 max-w-[310px] leading-relaxed">
+      <p className="text-[0.75rem] text-navy-900/50 mt-2 max-w-[310px] leading-relaxed">
         {hasSearch
           ? 'Try changing your search term or filters to find the records you need.'
           : 'Registered evacuees will appear here when their records are added to the system.'}
@@ -339,7 +343,9 @@ function EmptyState({
    MAIN PAGE
 ===================================================== */
 
-export default function Evacuees() {
+export default function Evacuees({ ctx }) {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'ADMIN_STAFF';
   const {
     toast,
     openModal,
@@ -362,6 +368,7 @@ export default function Evacuees() {
   const [priorityFilter, setPriorityFilter] = useState(false);
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
 
   /* ===================================================
@@ -369,6 +376,7 @@ export default function Evacuees() {
   =================================================== */
 
   async function load() {
+    setLoadError('');
     setLoading(true);
 
     try {
@@ -400,6 +408,7 @@ export default function Evacuees() {
           : []
       );
     } catch (error) {
+      setLoadError(error.message || 'Unable to load records.');
       toast(
         error?.message || 'Unable to load evacuee records.',
         'bad'
@@ -469,6 +478,8 @@ export default function Evacuees() {
     );
   });
 
+
+  const pager = usePagination(filtered, JSON.stringify([q, statusFilter, priorityFilter]));
 
   /* ===================================================
      SUMMARY STATISTICS
@@ -632,7 +643,7 @@ export default function Evacuees() {
             `/evacuees/${evacuee.evacuee_id}`
           );
 
-          toast('Evacuee record deleted.', 'bad');
+          toast('Evacuee record deleted.', 'ok');
 
           await load();
         } catch (error) {
@@ -656,9 +667,10 @@ export default function Evacuees() {
         incident.reporting_status !== 'Resolved'
     );
 
-    if (!centers.length) {
+    const availableCenters = centers.filter(c => c.status === 'Open' && Number(c.capacity) > Number(c.occupancy));
+    if (!availableCenters.length) {
       toast(
-        'Add an evacuation center before registering evacuees.',
+        'An open center with available space is required before registration.',
         'bad'
       );
 
@@ -675,12 +687,12 @@ export default function Evacuees() {
     }
 
     const availableCenter =
-      centers.find(
+      availableCenters.find(
         (center) =>
           Number(center.capacity) -
             Number(center.occupancy) >
           0
-      ) || centers[0];
+      ) || availableCenters[0];
 
     let form = {
       ...INITIAL_FORM,
@@ -703,7 +715,8 @@ export default function Evacuees() {
         <RegisterForm
           initial={form}
           ctl={controller}
-          centers={centers}
+          centers={availableCenters}
+          families={[...new Map(evacuees.filter(e => e.family_id).map(e => [String(e.family_id), e])).values()]}
           incidents={openIncidents}
           onChange={(next) => {
             form = next;
@@ -739,6 +752,7 @@ export default function Evacuees() {
 
               try {
                 await api.post('/evacuees/register', {
+                  family_id: form.family_id || undefined,
                   family: {
                     family_name: form.family_name.trim(),
 
@@ -790,6 +804,13 @@ export default function Evacuees() {
   }
 
 
+  const quickHandled = useRef(null);
+  useEffect(() => {
+    if (ctx?.quickAction === 'register' && !loading && !loadError && quickHandled.current !== ctx) {
+      quickHandled.current = ctx; registerModal();
+    }
+  }, [ctx, loading, loadError]);
+
   /* ===================================================
      CLEAR FILTERS
   =================================================== */
@@ -810,6 +831,7 @@ export default function Evacuees() {
 
       {/* PAGE HEADER */}
 
+      <LoadError message={loadError} onRetry={load} />
       <PageHeader
         title="Evacuees"
         subtitle="Manage evacuee registrations, household information, evacuation assignments, and priority assistance."
@@ -908,11 +930,11 @@ export default function Evacuees() {
 
             <div>
 
-              <h2 className="text-[15px] font-bold text-navy-900">
+              <h2 className="text-[0.9375rem] font-bold text-navy-900">
                 Evacuee Registry
               </h2>
 
-              <p className="text-[12px] text-navy-900/50 mt-1">
+              <p className="text-[0.75rem] text-navy-900/50 mt-1">
                 Search, review, and manage registered evacuees.
               </p>
 
@@ -982,7 +1004,7 @@ export default function Evacuees() {
                 border-0
                 outline-none
                 bg-transparent
-                text-[12.5px]
+                text-[0.78125rem]
                 text-navy-900
                 flex-1
                 min-w-0
@@ -1038,7 +1060,7 @@ export default function Evacuees() {
                 border-0
                 outline-none
                 bg-transparent
-                text-[12px]
+                text-[0.75rem]
                 text-navy-900
                 w-full
                 min-w-0
@@ -1076,7 +1098,7 @@ export default function Evacuees() {
               rounded-xl
               px-3
               py-2.5
-              text-[12px]
+              text-[0.75rem]
               font-semibold
               border
               transition
@@ -1097,7 +1119,7 @@ export default function Evacuees() {
               type="button"
               onClick={clearFilters}
               className="
-                text-[12px]
+                text-[0.75rem]
                 font-semibold
                 text-blue-600
                 hover:text-blue-800
@@ -1127,7 +1149,7 @@ export default function Evacuees() {
           border-navy-900/8
         ">
 
-          <div className="text-[12px] text-navy-900/55">
+          <div className="text-[0.75rem] text-navy-900/55">
 
             Showing{' '}
 
@@ -1145,11 +1167,11 @@ export default function Evacuees() {
 
           </div>
 
-          <div className="flex items-center gap-2 text-[11px] text-navy-900/45">
+          <div className="flex items-center gap-2 text-[0.6875rem] text-navy-900/45">
 
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
 
-            Live registry
+            Registry records
 
           </div>
 
@@ -1158,7 +1180,7 @@ export default function Evacuees() {
 
         {/* TABLE */}
 
-        <div className="overflow-x-auto scroll-thin">
+        <div className="hidden lg:block overflow-x-auto scroll-thin">
 
           <table className="w-full min-w-[950px] border-collapse">
 
@@ -1181,7 +1203,7 @@ export default function Evacuees() {
                     key={heading}
                     className="
                       text-left
-                      text-[10px]
+                      text-[0.625rem]
                       uppercase
                       tracking-[0.06em]
                       text-navy-900/45
@@ -1203,7 +1225,7 @@ export default function Evacuees() {
 
             <tbody>
 
-              {!loading && filtered.map((evacuee) => (
+              {!loading && pager.items.map((evacuee) => (
 
                 <tr
                   key={evacuee.evacuee_id}
@@ -1230,7 +1252,7 @@ export default function Evacuees() {
                         flex
                         items-center
                         justify-center
-                        text-[11px]
+                        text-[0.6875rem]
                         font-bold
                         shrink-0
                       ">
@@ -1242,12 +1264,12 @@ export default function Evacuees() {
 
                       <div className="min-w-0">
 
-                        <p className="text-[12.5px] font-bold text-navy-900">
+                        <p className="text-[0.78125rem] font-bold text-navy-900">
                           {evacuee.first_name} {evacuee.last_name}
                         </p>
 
                         {evacuee.middle_name && (
-                          <p className="text-[10.5px] text-navy-900/45 mt-0.5">
+                          <p className="text-[0.65625rem] text-navy-900/45 mt-0.5">
                             {evacuee.middle_name}
                           </p>
                         )}
@@ -1263,7 +1285,7 @@ export default function Evacuees() {
 
                   <td className="px-4 py-4">
 
-                    <span className="text-[12px] text-navy-900/70">
+                    <span className="text-[0.75rem] text-navy-900/70">
                       {evacuee.age ?? '—'}
                     </span>
 
@@ -1271,7 +1293,7 @@ export default function Evacuees() {
                       /
                     </span>
 
-                    <span className="text-[12px] text-navy-900/55">
+                    <span className="text-[0.75rem] text-navy-900/55">
                       {evacuee.gender || '—'}
                     </span>
 
@@ -1289,7 +1311,7 @@ export default function Evacuees() {
                         className="text-navy-900/35 shrink-0"
                       />
 
-                      <span className="text-[12px] text-navy-900/70">
+                      <span className="text-[0.75rem] text-navy-900/70">
                         {evacuee.family_name || '—'}
                       </span>
 
@@ -1309,7 +1331,7 @@ export default function Evacuees() {
                         className="text-navy-900/35 shrink-0"
                       />
 
-                      <span className="text-[12px] text-navy-900/65">
+                      <span className="text-[0.75rem] text-navy-900/65">
                         {evacuee.barangay || '—'}
                       </span>
 
@@ -1329,7 +1351,7 @@ export default function Evacuees() {
                         className="text-blue-500 shrink-0"
                       />
 
-                      <span className="text-[12px] text-navy-900/70 max-w-[180px] truncate">
+                      <span className="text-[0.75rem] text-navy-900/70 max-w-[180px] truncate">
                         {evacuee.center_name || '—'}
                       </span>
 
@@ -1357,7 +1379,7 @@ export default function Evacuees() {
 
                       {!evacuee.priority_types?.length && (
 
-                        <span className="text-[11px] text-navy-900/30">
+                        <span className="text-[0.6875rem] text-navy-900/30">
                           None
                         </span>
 
@@ -1443,7 +1465,7 @@ export default function Evacuees() {
                         <Edit2 size={14} />
                       </button>
 
-                      <button
+                      {isAdmin && <button
                         type="button"
                         onClick={() => removeEvacuee(evacuee)}
                         title="Delete evacuee"
@@ -1462,7 +1484,7 @@ export default function Evacuees() {
                         "
                       >
                         <Trash2 size={14} />
-                      </button>
+                      </button>}
 
                     </div>
 
@@ -1479,29 +1501,31 @@ export default function Evacuees() {
         </div>
 
 
+        {!loading && <div className="lg:hidden divide-y divide-slate-100">
+          {pager.items.map(person => <article key={person.evacuee_id} className="p-4 sm:p-5 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0"><h3 className="font-semibold text-sm break-words">{person.first_name} {person.last_name}</h3>
+                <p className="text-xs text-slate-500 mt-1">{person.age} years · {person.gender} · {person.family_name}</p></div>
+              <Badge className={getStatusClass(person.record_status)}>{person.record_status}</Badge>
+            </div>
+            <p className="text-xs text-slate-600 break-words">{person.center_name || 'Unassigned center'} · {person.barangay}</p>
+            {!!person.priority_types?.length && <div className="flex flex-wrap gap-1">{person.priority_types.map(type => <Badge key={type} className="bg-pink-50 text-pink-700">{type}</Badge>)}</div>}
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="ghost" onClick={() => editModal(person)}><Edit2 size={14} />Edit</Button>
+              {person.record_status === 'Present' && <Button size="sm" variant="ghost" onClick={() => checkout(person)}><LogOut size={14} />Check out</Button>}
+              {isAdmin && <Button size="sm" variant="subtle" aria-label={`Delete ${person.first_name} ${person.last_name}`} onClick={() => removeEvacuee(person)}><Trash2 size={14} />Delete</Button>}
+            </div>
+          </article>)}
+        </div>}
+
         {/* LOADING STATE */}
 
-        {loading && (
-
-          <div className="flex flex-col items-center justify-center py-14">
-
-            <RefreshCw
-              size={23}
-              className="animate-spin text-blue-600 mb-3"
-            />
-
-            <p className="text-[12px] font-medium text-navy-900/60">
-              Loading evacuee records...
-            </p>
-
-          </div>
-
-        )}
+        {loading && <Skeleton label="Loading evacuee records" />}
 
 
         {/* EMPTY STATE */}
 
-        {!loading && filtered.length === 0 && (
+        {!loading && !loadError && filtered.length === 0 && (
 
           <EmptyState
             hasSearch={
@@ -1534,11 +1558,11 @@ export default function Evacuees() {
             bg-slate-50/50
           ">
 
-            <p className="text-[11px] text-navy-900/45">
-              Showing {formatNumber(filtered.length)} matching records.
+            <p className="text-[0.6875rem] text-navy-900/45">
+              {formatNumber(filtered.length)} matching records.
             </p>
 
-            <p className="text-[11px] text-navy-900/45">
+            <p className="text-[0.6875rem] text-navy-900/45">
               Evacuation records are updated from the system registry.
             </p>
 
@@ -1548,6 +1572,7 @@ export default function Evacuees() {
 
       </section>
 
+      {!loading && <Pagination pager={pager} />}
     </div>
   );
 }
@@ -1595,7 +1620,7 @@ function NameAgeGender({
         items-center
         gap-2
         mb-3
-        text-[12px]
+        text-[0.75rem]
         font-bold
         text-navy-900
       ">
@@ -1741,7 +1766,7 @@ function EditForm({
 
       <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 mb-4">
 
-        <p className="text-[11px] text-blue-800 leading-relaxed">
+        <p className="text-[0.6875rem] text-blue-800 leading-relaxed">
           Update the evacuee's personal information.
           Family and evacuation assignment information will remain unchanged.
         </p>
@@ -1767,6 +1792,7 @@ function RegisterForm({
   initial,
   ctl,
   centers,
+  families,
   incidents,
   onChange,
 }) {
@@ -1786,8 +1812,13 @@ function RegisterForm({
       [key]: value,
     };
 
+    if (key === 'family_id') {
+      const household = families.find(f => String(f.family_id) === String(value));
+      next = { ...next, family_name: household?.family_name || '', barangay: household?.barangay || '', contact_number: household?.contact_number || '' };
+    }
+
     if (
-      key === 'last_name' &&
+      !form.family_id && key === 'last_name' &&
       (
         form.family_name === '' ||
         form.family_name === autoFamily.current
@@ -1846,7 +1877,7 @@ function RegisterForm({
         gap-2
         pt-4
         mb-2
-        text-[12px]
+        text-[0.75rem]
         font-bold
         text-navy-900
         border-t
@@ -1858,6 +1889,13 @@ function RegisterForm({
       </div>
 
 
+      <Field label="Household">
+        <Ctrl><Select value={form.family_id} onChange={e => set('family_id', e.target.value)}>
+          <option value="">Create a new household</option>
+          {families.map(f => <option key={f.family_id} value={f.family_id}>{f.family_name} · {f.barangay} · Household #{f.family_id}</option>)}
+        </Select></Ctrl>
+        <p className="text-xs text-slate-500 mt-2">Choose an existing household when registering another family member.</p>
+      </Field>
       <Field
         label="Family Name"
         required
@@ -1865,7 +1903,7 @@ function RegisterForm({
       >
         <Ctrl error={errors.family_name}>
           <TextInput
-            value={form.family_name}
+            disabled={Boolean(form.family_id)} value={form.family_name}
             onChange={(event) =>
               set('family_name', event.target.value)
             }
@@ -1885,7 +1923,7 @@ function RegisterForm({
         >
           <Ctrl error={errors.barangay}>
             <Select
-              value={form.barangay}
+              disabled={Boolean(form.family_id)} value={form.barangay}
               onChange={(event) =>
                 set('barangay', event.target.value)
               }
@@ -1920,7 +1958,7 @@ function RegisterForm({
               autoComplete="tel"
               maxLength={17}
               placeholder="+63 9XX XXX XXXX"
-              value={form.contact_number}
+              disabled={Boolean(form.family_id)} value={form.contact_number}
               onChange={(event) =>
                 set(
                   'contact_number',
@@ -1942,7 +1980,7 @@ function RegisterForm({
         gap-2
         pt-4
         mb-2
-        text-[12px]
+        text-[0.75rem]
         font-bold
         text-navy-900
         border-t
@@ -2033,7 +2071,7 @@ function RegisterForm({
         gap-2
         pt-4
         mb-2
-        text-[12px]
+        text-[0.75rem]
         font-bold
         text-navy-900
         border-t
@@ -2047,7 +2085,7 @@ function RegisterForm({
 
       <Field label="Priority Categories (optional)">
 
-        <p className="text-[11px] text-navy-900/45 mb-3">
+        <p className="text-[0.6875rem] text-navy-900/45 mb-3">
           Select all categories that apply to the evacuee.
         </p>
 
@@ -2064,7 +2102,7 @@ function RegisterForm({
                 aria-pressed={selected}
                 onClick={() => togglePriority(type)}
                 className={`
-                  text-[12px]
+                  text-[0.75rem]
                   rounded-lg
                   px-3
                   py-2

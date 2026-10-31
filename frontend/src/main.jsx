@@ -1,3 +1,5 @@
+const savedTextSize = Number(localStorage.getItem('rescom_text_size'));
+if (savedTextSize >= 100 && savedTextSize <= 125) document.documentElement.style.fontSize = `${savedTextSize}%`;
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';

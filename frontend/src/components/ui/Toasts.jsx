@@ -1,23 +1,13 @@
 import React from 'react';
-import { Check, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, X } from 'lucide-react';
 import { useUi } from '../../context/UiContext.jsx';
-
-const BG = {
-  ok: 'bg-success border-success',
-  warn: 'bg-warn border-warn',
-  bad: 'bg-danger border-danger'
-};
-
-export function Toasts() {
-  const { toasts } = useUi();
-  return (
-    <div className="fixed right-5 bottom-5 z-[99] flex flex-col gap-2.5">
-      {toasts.map((t) => (
-        <div key={t.id} className={`border text-white rounded-xl px-4 py-3.5 text-[12.5px] flex items-center gap-2.5 shadow-glass max-w-[340px] anim-slide ${BG[t.kind] || 'bg-navy-900 border-navy-900'}`}>
-          {t.kind === 'bad' ? <AlertTriangle size={16} /> : <Check size={16} />}
-          <span>{t.msg}</span>
-        </div>
-      ))}
-    </div>
-  );
+export function Toasts({ inDialog = false }) {
+  const { toasts, dismissToast, modal, confirm } = useUi();
+  if ((modal || confirm) && !inDialog) return null;
+  return <div className="toast-stack" aria-label="Notifications">
+    {toasts.map(t => <div key={t.id} role={t.kind === 'bad' ? 'alert' : 'status'} className={`rescom-toast toast-${t.kind}`}>
+      {t.kind === 'ok' ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}
+      <span className="flex-1 min-w-0">{t.msg}</span><button aria-label="Dismiss notification" onClick={() => dismissToast(t.id)}><X size={17} /></button>
+    </div>)}
+  </div>;
 }

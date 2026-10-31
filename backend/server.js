@@ -8,7 +8,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { Server } = require('socket.io');
-const jwt = require('jsonwebtoken');
+const { socketAuth } = require('./middleware/socketAuth');
 const { setIo } = require('./utils/notify');
 
 const authRoutes = require('./routes/auth.routes');
@@ -146,32 +146,18 @@ app.use((err, req, res, next) => {
 });
 
 // Socket.IO JWT authentication
-io.use((socket, next) => {
-  try {
-    const token =
-      socket.handshake.auth &&
-      socket.handshake.auth.token;
-
-    if (!token) {
-      return next(new Error('unauthorized'));
-    }
-
-    socket.data.user = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
-
-    next();
-  } catch (err) {
-    next(new Error('unauthorized'));
-  }
-});
+io.use(socketAuth);
 
 // Socket.IO connections
 io.on('connection', socket => {
   const { user_id, role } = socket.data.user;
 
   socket.join(`role:${role}`);
+  socket.join(`user:${user_id}`);
+  const expiresIn = socket.data.user.exp * 1000 - Date.now();
+  const expiryTimer = Number.isFinite(expiresIn)
+    ? setTimeout(() => socket.disconnect(true), Math.max(0, Math.min(expiresIn, 2147483647)))
+    : null;
 
   console.log(
     'Client connected:',
@@ -202,6 +188,7 @@ io.on('connection', socket => {
   });
 
   socket.on('disconnect', () => {
+    if (expiryTimer) clearTimeout(expiryTimer);
     console.log('Client disconnected:', socket.id);
   });
 });

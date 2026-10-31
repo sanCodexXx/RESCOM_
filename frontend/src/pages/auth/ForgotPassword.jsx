@@ -87,8 +87,8 @@ export default function ForgotPassword({ goto }) {
   return (
     <ForgotLayout>
       <div>
-        <h1 className="text-[28px] font-extrabold text-navy-900 mb-2 leading-tight">{COPY.title}</h1>
-        <p className="text-accent-700 text-[14px] leading-relaxed mb-8 max-w-[340px]">{COPY.sub}</p>
+        <h1 className="text-[1.75rem] font-extrabold text-navy-900 mb-2 leading-tight">{COPY.title}</h1>
+        <p className="text-accent-700 text-[0.875rem] leading-relaxed mb-8 max-w-[340px]">{COPY.sub}</p>
         <img src={illustration} alt="" className="w-full max-w-[320px] mx-auto md:mx-0" />
       </div>
 
@@ -104,7 +104,7 @@ export default function ForgotPassword({ goto }) {
                   role="tab"
                   aria-selected={channel === key}
                   onClick={() => setChannel(key)}
-                  className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-[13px] font-semibold transition ${channel === key ? 'bg-white text-navy-900 shadow-sm' : 'text-navy-900/50 hover:text-navy-900/80'}`}
+                  className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-[0.8125rem] font-semibold transition ${channel === key ? 'bg-white text-navy-900 shadow-sm' : 'text-navy-900/50 hover:text-navy-900/80'}`}
                 >
                   <Icon size={15} /> {label}
                 </button>
@@ -137,14 +137,14 @@ export default function ForgotPassword({ goto }) {
                     autoFocus
                   />
                 </Ctrl>
-                <div className="text-[11.5px] text-navy-900/50 mt-1.5">Use the mobile number saved on your account.</div>
+                <div className="text-[0.71875rem] text-navy-900/50 mt-1.5">Use the mobile number saved on your account.</div>
               </Field>
             )}
 
             <Button type="submit" variant="dark" block disabled={busy}>
               {busy ? 'Sending…' : channel === 'email' ? 'Send Code by Email' : 'Send Code by SMS'}
             </Button>
-            <button type="button" onClick={() => goto('login')} className="w-full text-center text-[13px] font-semibold text-accent-700 hover:underline mt-5 flex items-center justify-center gap-1.5">
+            <button type="button" onClick={() => goto('login')} className="w-full text-center text-[0.8125rem] font-semibold text-accent-700 hover:underline mt-5 flex items-center justify-center gap-1.5">
               <ArrowLeft size={14} /> Back to Login
             </button>
           </form>
@@ -153,11 +153,11 @@ export default function ForgotPassword({ goto }) {
         {step === 2 && (
           <form onSubmit={verifyPin}>
             {devPin && (
-              <div className="flex items-start gap-2.5 bg-warn-bg text-warn rounded-xl px-3.5 py-3 mb-5 text-[12px] leading-relaxed">
+              <div className="flex items-start gap-2.5 bg-warn-bg text-warn rounded-xl px-3.5 py-3 mb-5 text-[0.75rem] leading-relaxed">
                 <Info size={15} className="shrink-0 mt-0.5" />
                 <div>
                   <b className="block mb-0.5">Email/SMS isn't configured yet — here's your code for testing:</b>
-                  <span className="text-[20px] font-extrabold tracking-[4px] block mt-1">{devPin}</span>
+                  <span className="text-[1.25rem] font-extrabold tracking-[4px] block mt-1">{devPin}</span>
                   <span className="opacity-80">Configure SMTP_HOST / SMTP_USER / SMTP_PASS in backend/.env to send this for real.</span>
                 </div>
               </div>
@@ -175,8 +175,8 @@ export default function ForgotPassword({ goto }) {
               </Ctrl>
             </Field>
             <Button type="submit" variant="dark" block disabled={busy}>{busy ? 'Verifying…' : 'Verify Code'}</Button>
-            <button type="button" onClick={requestPin} className="w-full text-center text-[12px] font-semibold text-accent-700 hover:underline mt-3">Resend code</button>
-            <button type="button" onClick={() => setStep(1)} className="w-full text-center text-[13px] font-semibold text-accent-700 hover:underline mt-4 flex items-center justify-center gap-1.5">
+            <button type="button" onClick={requestPin} className="w-full text-center text-[0.75rem] font-semibold text-accent-700 hover:underline mt-3">Resend code</button>
+            <button type="button" onClick={() => setStep(1)} className="w-full text-center text-[0.8125rem] font-semibold text-accent-700 hover:underline mt-4 flex items-center justify-center gap-1.5">
               <ArrowLeft size={14} /> Back
             </button>
           </form>

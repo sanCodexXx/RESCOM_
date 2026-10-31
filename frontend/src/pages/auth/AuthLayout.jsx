@@ -21,17 +21,17 @@ export function LoginLayout({ children }) {
       <div className="hidden lg:flex flex-col absolute top-10 left-8 xl:left-12 z-20">
         <div className="flex items-center gap-3">
           <Logo size={64} />
-          <div><b className="text-white text-[22px] block leading-tight">MDRRMO</b><span className="text-white/70 text-[13px]">San Nicolas, Ilocos Norte</span></div>
+          <div><b className="text-white text-[1.375rem] block leading-tight">MDRRMO</b><span className="text-white/70 text-[0.8125rem]">San Nicolas, Ilocos Norte</span></div>
         </div>
-        <h2 className="text-white text-[44px] font-bold leading-[1.1] mt-14 max-w-[420px]">Together for a Safer Community</h2>
-        <p className="text-white/75 text-[16px] mt-4 max-w-[340px]">Monitoring, reporting, and responding to emergencies effectively.</p>
+        <h2 className="text-white text-[2.75rem] font-bold leading-[1.1] mt-14 max-w-[420px]">Together for a Safer Community</h2>
+        <p className="text-white/75 text-[1rem] mt-4 max-w-[340px]">Monitoring, reporting, and responding to emergencies effectively.</p>
       </div>
       <div className="relative z-10 w-full min-w-0 max-w-[1280px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 px-4 sm:px-10">
         <div className="hidden lg:block" />
         <div className="min-w-0 flex flex-col items-center justify-center py-8 sm:py-10">
           <div className="lg:hidden flex items-center justify-center gap-3 mb-6 max-w-full"><Logo size={52} /><b className="text-white text-lg leading-tight">MDRRMO San Nicolas</b></div>
           {children}
-          <p className="text-white/60 text-[11.5px] mt-6 text-center px-2">©2026 MDRRMO San Nicolas, Ilocos Norte. All rights reserved.</p>
+          <p className="text-white/60 text-[0.71875rem] mt-6 text-center px-2">©2026 MDRRMO San Nicolas, Ilocos Norte. All rights reserved.</p>
         </div>
       </div>
     </div>
@@ -50,13 +50,13 @@ export function RegisterLayout({ children }) {
       </div>
       <div className="hidden lg:flex flex-col items-center bg-[#eaf2fd] px-12 pt-14 overflow-hidden">
         <Logo size={92} />
-        <b className="text-navy-900 text-[20px] mt-3">MDRRMO</b>
-        <span className="text-navy-900/60 text-[13px]">San Nicolas, Ilocos Norte</span>
+        <b className="text-navy-900 text-[1.25rem] mt-3">MDRRMO</b>
+        <span className="text-navy-900/60 text-[0.8125rem]">San Nicolas, Ilocos Norte</span>
         <div className="mt-10 space-y-5 w-full max-w-[380px]">
           {items.map(([t, d], i) => (
             <div key={i} className="flex gap-3.5 items-start">
-              <span className="w-9 h-9 rounded-full bg-accent-700 text-white grid place-items-center text-[13px] font-bold shrink-0">{i + 1}</span>
-              <div><b className="text-[14px] text-navy-900 block">{t}</b><span className="text-[12.5px] text-navy-900/60">{d}</span></div>
+              <span className="w-9 h-9 rounded-full bg-accent-700 text-white grid place-items-center text-[0.8125rem] font-bold shrink-0">{i + 1}</span>
+              <div><b className="text-[0.875rem] text-navy-900 block">{t}</b><span className="text-[0.78125rem] text-navy-900/60">{d}</span></div>
             </div>
           ))}
         </div>

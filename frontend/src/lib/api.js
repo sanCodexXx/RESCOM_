@@ -12,17 +12,29 @@ async function request(path, { method = 'GET', body, auth = true, formData = fal
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${BASE_URL}/api${path}`, {
-    method,
-    headers,
-    body: formData ? body : (body ? JSON.stringify(body) : undefined)
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000);
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}/api${path}`, {
+      method, headers, signal: controller.signal,
+      body: formData ? body : (body ? JSON.stringify(body) : undefined)
+    });
+  } catch (cause) {
+    const mutation = method !== 'GET';
+    const message = cause.name === 'AbortError'
+      ? 'The server took too long to respond.'
+      : 'Could not reach the server. Check your internet connection.';
+    throw new Error(message + (mutation ? ' The save outcome is unknown. Refresh the records before trying again to avoid duplicates.' : ' Please try again.'), { cause });
+  } finally { clearTimeout(timeout); }
 
   let data = null;
   try { data = await res.json(); } catch (e) { /* no body */ }
 
   if (!res.ok) {
-    throw new Error(data?.error || `Request failed (${res.status})`);
+    const error = new Error(data?.error || `Request failed (${res.status})`);
+    error.status = res.status;
+    throw error;
   }
   return data;
 }

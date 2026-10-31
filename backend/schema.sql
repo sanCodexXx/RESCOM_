@@ -33,6 +33,8 @@ CREATE TABLE USERS (
   unit           VARCHAR(150),
   latitude       DOUBLE PRECISION,
   longitude      DOUBLE PRECISION,
+  status         VARCHAR(20) NOT NULL DEFAULT 'Active' CONSTRAINT users_status_valid CHECK (status IN ('Active', 'Inactive', 'Pending')),
+  last_active_at TIMESTAMP,
   created_at     TIMESTAMP NOT NULL DEFAULT NOW()
 );
 

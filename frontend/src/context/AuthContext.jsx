@@ -16,7 +16,7 @@ export function AuthProvider({ children }) {
       setUser(user);
       getSocket().connect();
     } catch (e) {
-      localStorage.removeItem('rescom_token');
+      if (e.status === 401 || e.status === 403) localStorage.removeItem('rescom_token');
     } finally {
       setLoading(false);
     }
