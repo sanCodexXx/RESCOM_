@@ -1,3 +1,23 @@
+# Current UI cleanup
+
+The user's requested interaction takes precedence over the earlier nonblocking-toast design. Routine save, edit and deletion feedback now appears in a large centered popup, with keyboard focus handling and dismissal. Errors above forms preserve unsaved field values.
+
+A remaining permission leak was fixed in the center-details footer: Field Personnel could still open Edit Center from that modal even though card editing was hidden. Both entry points now follow the Admin-only API policy, and the edit-opening function also guards against unauthorized invocation. Backend permissions were not loosened.
+
+Field views are focused on daily tasks and essential counts. Admin analysis is available on demand. PDF reporting is retained for both roles, and detailed metadata/finalization actions are in report details. No records or schema were changed.
+
+Validation: production build passed, 14 Node tests passed, and 14 browser interaction/layout checks passed with fictional API responses. These include the center-details permission path, centered success/error feedback, form preservation, collapsed analytics, simplified role views and phone/tablet layouts. Live deployment/UAT was not performed.
+
+---
+
+# PDF-only reporting follow-up
+
+The interview requirement supersedes the earlier spreadsheet export option. DROMIC and period reports are PDF-only for both authorized roles. The Excel endpoint and workbook builder were removed; attempts to request non-PDF period exports return a clear validation error. Stored reports and figures were not modified.
+
+Validation: production frontend build passed; 14 Node tests passed, including actual PDF byte generation and removed export-route checks; 5 browser checks passed with fictional API data for both roles. Live deployment and database integration were not performed.
+
+---
+
 # RESCOM code and UI review
 
 Review date: 31 October 2026. Scope: uploaded source and the functional objectives/scope in Chapter 1 of FINAL_PROJECT (1).pdf. Source inspection, automated tests and browser tests with fictional API responses are separate from deployment validation.
@@ -34,7 +54,7 @@ Review date: 31 October 2026. Scope: uploaded source and the functional objectiv
 | Priority cases | Categories and case workflows exist. Validate the office's actual categories and handling rules in UAT. |
 | Occupancy and presence | Registration/check-out logic updates headcounts; registration locks the chosen center in a transaction. Real concurrency behavior needs a PostgreSQL integration test. |
 | Real-time monitoring | Server emits events and the dashboard now subscribes to them. Browser tests simulate an event; actual multi-device Socket.IO transmission must be tested on the deployed environment. |
-| DROMIC reports | Report generation code, snapshots and template assets exist. Office review is still needed before claiming official format/figure compliance. |
+| DROMIC reports | PDF report generation code and snapshots exist. Spreadsheet report export was removed following the interview requirement. Office review is still needed before claiming official format/figure compliance. |
 | Starlink communication layer | A hosted web app can be accessed through the authorized Starlink connection. No satellite API is needed for ordinary web access. This review did not operate Starlink equipment or prove transmission over it. |
 | Online scope without offline entry | Preserved. Authentication/display preferences use browser storage; evacuation records are not stored in an offline queue. |
 | UAT, reliability and performance evaluation | Requires actual MDRRMO respondents and documented results. Automated sample-data tests do not replace UAT. |

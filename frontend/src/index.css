@@ -80,12 +80,6 @@ main { padding-bottom: 6rem !important; }
 .dialog-body { padding: 12px 24px 24px; font-size: .875rem; }
 .dialog-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; background: #f8fafc; border-top: 1px solid var(--rescom-line); position: sticky; bottom: 0; }
 .dialog-footer > .rescom-button { width: auto; flex: 1; }
-.toast-stack { position: fixed; bottom: 24px; right: 24px; z-index: 100; display: flex; flex-direction: column; gap: 10px; width: min(390px,calc(100vw - 32px)); pointer-events: none; }
-.rescom-toast { pointer-events: auto; display: flex; align-items: flex-start; gap: 10px; padding: 15px; border: 1px solid #d5e4db; border-left: 4px solid #127a45; border-radius: 12px; color: #164e32; background: #fff; box-shadow: 0 4px 20px #0b1a471a; font-size: .875rem; overflow-wrap: anywhere; }
-.rescom-toast > svg { flex-shrink: 0; }
-.rescom-toast button { padding: 2px; flex-shrink: 0; }
-.toast-bad { border-color: #efc7c7; border-left-color: #ba3039; color: #982c29; }
-.toast-warn { border-color: #e5d2b7; border-left-color: #a55b09; color: #804a09; }
 .connection-status { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 20px; font-size: .75rem; color: #52617a; }
 .connection-status > button { display: grid; place-items: center; min-width: 32px; min-height: 32px; border-radius: 8px; }
 .connection-online { color: #127a45; }
@@ -99,7 +93,6 @@ main { padding-bottom: 6rem !important; }
 .skip-link { position: fixed; left: 16px; top: -100px; padding: 12px 18px; background: white; color: #0b1a47; z-index: 150; border-radius: 8px; }
 .skip-link:focus { top: 10px; }
 @media (max-width: 767px) {
-  .toast-stack { bottom: 92px; right: 16px; }
   .rescom-button { min-height: 44px; }
   input, textarea, select { font-size: 1rem !important; }
   .dialog-header { padding: 18px 18px 10px; }
@@ -118,3 +111,20 @@ main { padding-bottom: 6rem !important; }
   .rescom-evacuee-summary > div > div:last-child { display: none; }
   .rescom-evacuee-summary p:last-child { display: none; }
 }
+
+/* Centered feedback requested after the MDRRMO UI review. */
+.feedback-dialog { position: fixed; inset: 0; margin: auto; box-sizing: border-box; width: min(360px,calc(100vw - 32px)); min-height: 330px; max-height: calc(100dvh - 32px); padding: 36px 28px 26px; border: 1px solid #dce3ee; border-radius: 20px; text-align: center; color: #0b1a47; box-shadow: 0 24px 80px #0b1a4726; overflow-y: auto; }
+.feedback-dialog::backdrop { background: #0b1a4755; }
+.feedback-close { position: absolute; right: 12px; top: 12px; padding: 10px; color: #52617a; border-radius: 10px; }
+.feedback-icon { display: grid; place-items: center; width: 76px; height: 76px; margin: 0 auto 20px; border-radius: 50%; background: #e3f6ec; color: #127a45; }
+.feedback-bad .feedback-icon { background: #fff0f0; color: #b4232c; }
+.feedback-warn .feedback-icon { background: #fff4df; color: #925609; }
+.feedback-dialog h2 { font-size: 1.25rem; font-weight: 700; line-height: 1.4; }
+.feedback-dialog p { font-size: .9375rem; color: #52617a; line-height: 1.6; margin: 10px 0 22px; overflow-wrap: anywhere; }
+.feedback-done { width: 100%; min-height: 44px; padding: 10px 16px; border-radius: 10px; color: white; background: #2563eb; font-size: .875rem; font-weight: 600; }
+.rescom-dialog { overflow: hidden; }
+.rescom-dialog[open] { display: flex; flex-direction: column; }
+.dialog-header { flex-shrink: 0; border-bottom: 1px solid #edf0f5; padding-bottom: 18px; }
+.dialog-body { min-height: 0; overflow-y: auto; flex: 1 1 auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.dialog-footer { flex-shrink: 0; position: static; }
+.data-pagination:has(> span:only-child) { background: transparent; border: 0; padding: 0 2px; }

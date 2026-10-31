@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { useUi } from '../../context/UiContext.jsx';
-import { Toasts } from './Toasts.jsx';
 import Button from './Button.jsx';
 function safeMsg(msg) {
   return String(msg ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/&lt;(\/?)b&gt;/g, '<$1b>');
@@ -42,6 +41,5 @@ export function ModalHost() {
           finally { setBusy(false); }
         }}>{busy ? 'Working…' : confirm.confirmLabel || 'Confirm'}</Button></div>
     </> : <><div className="dialog-body">{modal.body}</div><div className="dialog-footer">{modal.footer}</div></>}
-    <Toasts inDialog />
   </dialog>;
 }

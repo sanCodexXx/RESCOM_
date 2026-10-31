@@ -31,15 +31,15 @@ export function Pagination({ pager }) {
   const visible = [...new Set([1, page - 1, page, page + 1, pages])].filter(p => p > 0 && p <= pages).sort((a,b) => a-b);
   return <nav aria-label="Record pages" className="data-pagination">
     <span role="status">{(page - 1) * size + 1}–{Math.min(page * size, total)} of {total}</span>
-    <label className="flex items-center gap-2">Per page<select aria-label="Records per page" value={size} onChange={e => setSize(Number(e.target.value))}>
+    {total > 10 && <label className="flex items-center gap-2">Per page<select aria-label="Records per page" value={size} onChange={e => setSize(Number(e.target.value))}>
       {[10, 25, 50].map(n => <option key={n}>{n}</option>)}
-    </select></label>
-    <div className="flex gap-1 items-center flex-wrap">
+    </select></label>}
+    {pages > 1 && <div className="flex gap-1 items-center flex-wrap">
       <button aria-label="Previous page" disabled={page === 1} onClick={() => setPage(page - 1)}><ChevronLeft size={16} /></button>
       {visible.map((p, i) => <React.Fragment key={p}>{i > 0 && p - visible[i-1] > 1 && <span aria-hidden="true">…</span>}
         <button aria-label={`Page ${p}`} aria-current={page === p ? 'page' : undefined} onClick={() => setPage(p)}>{p}</button>
       </React.Fragment>)}
       <button aria-label="Next page" disabled={page === pages} onClick={() => setPage(page + 1)}><ChevronRight size={16} /></button>
-    </div>
+    </div>}
   </nav>;
 }

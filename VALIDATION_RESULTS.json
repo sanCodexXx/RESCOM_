@@ -46,5 +46,48 @@
     "Netlify/Render deployment",
     "Physical Starlink connection",
     "MDRRMO UAT"
-  ]
+  ],
+  "pdf_only_update": {
+    "date": "2026-11-01",
+    "production_build": "passed",
+    "node_tests_passed": 14,
+    "browser_tests": {
+      "checks": [
+        "Admin can download incident PDF",
+        "Period generation uses PDF only",
+        "New incident report automatically downloads PDF",
+        "Field personnel can download the same incident PDF",
+        "Report details offer PDF without Excel"
+      ],
+      "errors": []
+    },
+    "actual_pdf_generation": "passed using fictional data; no live DB",
+    "deployment": "not performed"
+  },
+  "role_ui_cleanup": {
+    "date": "2026-11-01",
+    "production_build": "passed",
+    "node_tests_passed": 14,
+    "browser_tests": {
+      "checks": [
+        "Admin detailed charts collapsed by default and available on demand",
+        "Save confirmation is a large centered square with contained focus",
+        "Feedback Escape and dismissal",
+        "Edit confirmation uses centered feedback",
+        "Error popup appears above open form and preserves entered values",
+        "Delete confirmation uses centered feedback",
+        "Reports simplified, PDF-only and detail metadata accessible",
+        "Field workspace shows daily tasks and hides admin analysis",
+        "Field center cards and details both hide admin editing",
+        "Field registry shows only essential summary cards",
+        "Field screens fit 768px",
+        "Field screens fit 390px",
+        "Field screens fit 320px",
+        "Centered feedback fits 320px phone"
+      ],
+      "errors": []
+    },
+    "data": "fictional API responses; no real user or evacuee data",
+    "deployment": "not performed"
+  }
 }

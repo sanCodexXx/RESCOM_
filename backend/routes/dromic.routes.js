@@ -1,5 +1,5 @@
 const express = require('express');
-const { buildDromicPdf, buildDromicXlsx } = require('../utils/dromicPdf');
+const { buildDromicPdf } = require('../utils/dromicPdf');
 const db = require('../db');
 const { compileFigures } = require('../utils/figures');
 const { verifyToken, requireRole } = require('../middleware/auth');
@@ -98,25 +98,6 @@ router.get('/:id/pdf', async (req, res) => {
     console.error('DROMIC PDF failed:', e);
     if (!res.headersSent) res.status(500).json({ error: 'Could not build PDF' });
     else res.end();
-  }
-});
-
-// GET /api/dromic/:id/xlsx - the report filled into the official DSWD DROMIC Excel template
-router.get('/:id/xlsx', async (req, res) => {
-  try {
-    const data = await compileSummary(req.params.id);
-    if (!data) return res.status(404).json({ error: 'Report not found' });
-    // Reports saved before Excel export existed have no per-center rows in their snapshot,
-    // so fill those in from the current records.
-    if (!data.ecRows && data.report.incident_id) Object.assign(data, await compileFigures(data.report.incident_id));
-    const { buffer } = await buildDromicXlsx(data);
-    const name = `DROMIC-Report-${data.report.report_no || data.report.report_id}-${String(data.report.disaster_name || 'incident').replace(/[^\w-]+/g, '_')}.xlsx`;
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
-    res.send(buffer);
-  } catch (e) {
-    console.error('DROMIC Excel failed:', e);
-    res.status(500).json({ error: 'Could not build the Excel report' });
   }
 });
 

@@ -158,7 +158,7 @@ export default function Users() {
         ? `<b>${fullName(u)}</b>'s sign-up request will be rejected and removed.`
         : `<b>${fullName(u)}</b> will lose access to RESCOM immediately.`,
       onConfirm: async () => {
-        try { await api.del(`/users/${u.user_id}`); toast(pending ? 'Registration rejected' : 'User deleted', 'bad'); load(); }
+        try { await api.del(`/users/${u.user_id}`); toast(pending ? 'Registration rejected' : 'User deleted', 'ok'); load(); }
         catch (e) { toast(e.message, 'bad'); }
       }
     });

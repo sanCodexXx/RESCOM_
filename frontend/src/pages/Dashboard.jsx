@@ -1,3 +1,4 @@
+import { useAuth } from '../context/AuthContext.jsx';
 import { getSocket } from '../lib/socket.js';
 import { LoadError, Skeleton } from '../components/ui/DataStates.jsx';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -227,6 +228,8 @@ function EmptyState({
 ===================================================== */
 
 export default function Dashboard({ onNav }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN_STAFF';
   const { toast } = useUi();
 
   const [stats, setStats] = useState({
@@ -269,8 +272,8 @@ export default function Dashboard({ onNav }) {
       ] = await Promise.all([
         api.get('/evacuees/stats'),
         api.get('/centers'),
-        api.get('/incidents'),
-        api.get('/evacuees'),
+        isAdmin ? api.get('/incidents') : Promise.resolve([]),
+        isAdmin ? api.get('/evacuees') : Promise.resolve([]),
       ]);
 
       setStats(statsResponse || {
@@ -307,7 +310,7 @@ export default function Dashboard({ onNav }) {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, isAdmin]);
 
 
   useEffect(() => {
@@ -317,7 +320,8 @@ export default function Dashboard({ onNav }) {
     const refresh = () => { clearTimeout(timer); timer = setTimeout(() => load(false), 250); };
     const events = ['connect', 'center_updated', 'evacuee_registered', 'priority_case_flagged', 'new_incident_dispatched', 'incident_status_changed'];
     events.forEach(event => socket.on(event, refresh));
-    return () => { clearTimeout(timer); events.forEach(event => socket.off(event, refresh)); };
+
+  return () => { clearTimeout(timer); events.forEach(event => socket.off(event, refresh)); };
   }, [load]);
 
 
@@ -425,6 +429,28 @@ export default function Dashboard({ onNav }) {
   /* =====================================================
      HEADER
   ===================================================== */
+
+  if (!isAdmin) return <div className="space-y-5">
+    <LoadError message={loadError} onRetry={load} />
+    <PageHeader title="Field workspace" subtitle="Register evacuees, review centers and share PDF reports."
+      actions={<Button size="sm" variant="ghost" disabled={loading} onClick={load}><RefreshCw size={14} />Refresh</Button>} />
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <StatCard icon={<Users size={19} />} label="Evacuees present" value={loading ? '—' : formatNumber(stats.currentlyPresent)} onClick={() => navigate('evacuees')} />
+      <StatCard icon={<Building2 size={19} />} label="Spaces available" value={loading ? '—' : formatNumber(availableCapacity)} onClick={() => navigate('centers')} />
+      <StatCard icon={<ShieldAlert size={19} />} label="Priority cases" value={loading ? '—' : formatNumber(stats.totalPriorityCases)} onClick={() => navigate('priority')} />
+    </div>
+    <section className="glass rounded-glass p-5">
+      <h2 className="font-semibold mb-4">Daily tasks</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Button onClick={() => onNav('evacuees', { quickAction: 'register' })}>Register evacuee</Button>
+        <Button variant="ghost" onClick={() => navigate('centers')}>View evacuation centers</Button>
+        <Button variant="ghost" onClick={() => navigate('priority')}>Review priority cases</Button>
+        <Button variant="ghost" onClick={() => navigate('dromic')}>Open PDF reports</Button>
+      </div>
+    </section>
+    <p className="text-xs text-slate-500">{lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })}` : 'Loading shared records…'}</p>
+  </div>;
+
 
   return (
     <div className="rescom-dashboard space-y-5">
@@ -654,6 +680,7 @@ export default function Dashboard({ onNav }) {
           CHARTS
       ================================================= */}
 
+      <details className="glass rounded-glass p-5"><summary className="cursor-pointer font-semibold">Detailed charts</summary><div className="space-y-5 mt-5">
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
 
         {/* CENTER OCCUPANCY CHART */}
@@ -947,6 +974,8 @@ export default function Dashboard({ onNav }) {
       {/* =================================================
           BOTTOM SECTION
       ================================================= */}
+
+      </div></details>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
 

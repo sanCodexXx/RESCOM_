@@ -1,3 +1,55 @@
+## Current update: simpler role views and centered feedback
+
+This ZIP includes the PDF-only reporting change and the latest UI cleanup. Use this version instead of the earlier ZIP.
+
+1. Stop any running local development terminals.
+2. Extract the ZIP to a separate folder.
+3. Copy the contents of the extracted `rescom` folder into your original project folder. Merge folders and replace matching files. Do not delete the original project folder first. Your `.env`, `.git`, and node_modules are not in this ZIP and should stay in your project.
+4. In `frontend`, run `npm run build`.
+5. Check `git status --short`, then commit and push after reviewing the files. The live website does not change until the frontend/backend deploy the updated code.
+
+No new database migration or dependency install is required for this follow-up. Do not run schema.sql on your existing database.
+
+Latest UI behavior:
+
+- Save/edit/delete feedback uses a centered, large, nearly square popup. Success messages close after 3.5 seconds or OK; errors remain until dismissed. Escape also dismisses feedback.
+- An error popup stays above an open form; dismissing it returns to the form with the entered data intact.
+- Form title and footer buttons remain visible while the body scrolls.
+- Field Personnel have a focused home screen, two essential evacuee metrics, and no administrator center-edit entry in either cards or center details. Center editing remains Admin-only on the server.
+- Admin charts and report analytics are collapsed by default. Full report metadata and administrative status actions are inside View report.
+- DROMIC reports use compact mobile cards. PDF is available to both roles; Excel reporting stays removed.
+- Single-page lists no longer show unnecessary page arrows. Connection text is simplified to Connected/Offline.
+
+You may delete the unused legacy `frontend/src/lib/dromicExcel.js` and `backend/templates/Blank-DROMIC-Template.xlsx` if they remain after merging an older folder. They are not included or referenced by this version.
+
+The feedback and UI were checked using sample data. Production hosting was not modified.
+
+---
+
+## PDF-only update after the MDRRMO interview
+
+Excel and CSV report exports have been removed. Both Admin and Field Personnel use PDF reports.
+
+For this follow-up, replace these four files in your current project:
+
+- `frontend/src/pages/DromicReports.jsx`
+- `backend/routes/dromic.routes.js`
+- `backend/routes/analytics.routes.js`
+- `backend/utils/dromicPdf.js`
+
+Also copy `backend/tests/pdf-only.test.cjs` if you want the new export regression tests.
+
+Delete these unused legacy files if they remain in your folder:
+
+- `frontend/src/lib/dromicExcel.js`
+- `backend/templates/Blank-DROMIC-Template.xlsx`
+
+No database update or dependency installation is needed for this PDF-only follow-up. Keep your existing `.env` files. Run `npm run build` in frontend, then review, commit and push the new changes to update the hosted application. Source files in this ZIP have not been pushed or deployed for you.
+
+Incident PDF downloads, the automatic download after creating a report, summary downloads and period reports now all use PDF. Unrelated account-list CSV export is unchanged.
+
+---
+
 # RESCOM update guide
 
 Reviewed source: the supplied rescom.zip. This update changes the local project only. No GitHub push, production database modification, or deployment was performed.

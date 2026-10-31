@@ -2,7 +2,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { usePagination } from '../hooks/usePagination.js';
 import { Pagination, Skeleton, LoadError, EmptyState as SharedEmptyState } from '../components/ui/DataStates.jsx';
 import React, { useEffect, useRef, useState } from 'react';
-import { Plus, FileBarChart, Users, Building2, ShieldAlert, Download, Lock, FileSpreadsheet, Activity, CheckCircle, AlertTriangle, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, FileBarChart, Users, Building2, ShieldAlert, Download, Lock, Activity, CheckCircle, AlertTriangle, ArrowUp, ArrowDown } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell, PieChart, Pie } from 'recharts';
 import { PageHeader } from '../components/layout/Shell.jsx';
 import Button from '../components/ui/Button.jsx';
@@ -12,7 +12,6 @@ import { api } from '../lib/api.js';
 import { BARANGAYS } from '../lib/barangays.js';
 import { useUi } from '../context/UiContext.jsx';
 import { getSocket } from '../lib/socket.js';
-import { downloadDromicExcel } from '../lib/dromicExcel.js';
 
 // Database values stay Draft / Active / Finalized; these are the names people see.
 const STATUS_LABEL = { Draft: 'Draft', Active: 'On-Going', Finalized: 'Final' };
@@ -137,12 +136,12 @@ export default function DromicReports() {
     finally { setListLoading(false); }
   }
 
-  useEffect(() => { loadOverview(); }, [from, to, brgy]);
+  useEffect(() => { if (isAdmin) loadOverview(); else setOverviewLoading(false); }, [from, to, brgy, isAdmin]);
 
   useEffect(() => {
     loadReports();
     const s = getSocket();
-    const refresh = () => { loadReports(); overviewRef.current(); };
+    const refresh = () => { loadReports(); if (isAdmin) overviewRef.current(); };
     const events = ['dromic_report_generated', 'evacuee_registered', 'incident_status_changed', 'new_incident_dispatched'];
     events.forEach(e => s.on(e, refresh));
     return () => events.forEach(e => s.off(e, refresh));
@@ -153,7 +152,7 @@ export default function DromicReports() {
   // ---------- period report (the Generate Report button) ----------
 
   function openPeriodReport() {
-    const form = { type: 'monthly', from, to, format: 'pdf', brgy };
+    const form = { type: 'monthly', from, to, brgy };
     openModal({
       title: 'Generate Report',
       sub: 'Export a situational report for submission',
@@ -169,12 +168,11 @@ export default function DromicReports() {
     if (!form.from || !form.to || form.from > form.to) { toast('Check the From and To dates', 'bad'); return; }
     try {
       const qs = new URLSearchParams({
-        type: form.type, from: form.from, to: form.to, format: form.format,
+        type: form.type, from: form.from, to: form.to, format: 'pdf',
         ...(form.brgy ? { brgy: form.brgy } : {})
       });
       const blob = await api.download(`/analytics/export?${qs}`);
-      const ext = form.format === 'xlsx' ? 'xlsx' : form.format;
-      saveBlob(blob, `Situational-Report-${form.from}-to-${form.to}.${ext}`);
+      saveBlob(blob, `Situational-Report-${form.from}-to-${form.to}.pdf`);
       closeModal();
       toast('Report downloaded', 'ok');
     } catch (e) { toast(e.message, 'bad'); }
@@ -197,9 +195,9 @@ export default function DromicReports() {
           if (!form.incident_id) { toast('Select a disaster incident', 'bad'); return; }
           try {
             const r = await api.post('/dromic', form); closeModal(); toast(`DROMIC Report #${r.report_no} generated`, 'ok'); loadReports();
-            // Open the same figures in the DSWD Excel template right away.
+            // Download the PDF of the newly created report snapshot.
             const inc = incidents.find(i => String(i.incident_id) === String(form.incident_id));
-            await downloadExcel({ ...r, disaster_name: inc?.disaster_name });
+            await downloadPdf({ ...r, disaster_name: inc?.disaster_name });
           } catch (e) { toast(e.message, 'bad'); }
         }}><FileBarChart size={14} />Generate</Button>
       </>
@@ -215,6 +213,7 @@ export default function DromicReports() {
         sub: `as of ${fmtAsOf(r.as_of || r.report_date)} · ${STATUS_LABEL[r.reporting_status]}`,
         body: (
           <div>
+            <p className="text-xs text-slate-500 mb-4">Prepared by {[r.author_first, r.author_last].filter(Boolean).join(' ') || 'MDRRMO staff'} · {r.brgy || 'All barangays'}</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
               <MiniStat icon={<Users size={16} />} label="Persons now" value={t.persons_now} />
               <MiniStat icon={<Users size={16} />} label="Persons (cum)" value={t.persons_cum} />
@@ -244,13 +243,14 @@ export default function DromicReports() {
                 <p className="text-navy-900/65 text-[0.78125rem] leading-relaxed">{r.field_remarks}</p>
               </div>
             )}
-            <p className="text-[0.6875rem] text-navy-900/45 mt-4">The Excel file is the official DSWD DROMIC template, filled in and ready to edit. The PDF follows the same DROMIC layout.</p>
+            <p className="text-[0.6875rem] text-navy-900/45 mt-4">Admin and Field Personnel can download the same PDF report snapshot. Its figures reflect the report’s as-of date and time.</p>
           </div>
         ),
         footer: <>
           <Button variant="ghost" block onClick={closeModal}>Close</Button>
-          <Button variant="ghost" block onClick={() => downloadPdf(r)}><Download size={14} />PDF</Button>
-          <Button block onClick={() => downloadExcel(r)}><FileSpreadsheet size={14} />Download Excel</Button>
+          {isAdmin && r.reporting_status === 'Draft' && <Button variant="ghost" onClick={() => { closeModal(); setStatus(r, 'Active'); }}>Activate</Button>}
+          {isAdmin && r.reporting_status === 'Active' && <Button variant="ghost" onClick={() => { closeModal(); finalize(r); }}>Finalize</Button>}
+          <Button block onClick={() => downloadPdf(r)}><Download size={14} />Download PDF</Button>
         </>
       });
     } catch (e) { toast(e.message, 'bad'); }
@@ -261,11 +261,6 @@ export default function DromicReports() {
       const blob = await api.download(`/dromic/${r.report_id}/pdf`);
       saveBlob(blob, `DROMIC-Report-${r.report_no || r.report_id}-${(r.disaster_name || 'incident').replace(/[^\w-]+/g, '_')}.pdf`);
     } catch (e) { toast(e.message, 'bad'); }
-  }
-
-  async function downloadExcel(r) {
-    try { await downloadDromicExcel(r); toast('Excel report downloaded. Open it in Excel to edit.', 'ok'); }
-    catch (e) { toast(e.message, 'bad'); }
   }
 
   async function setStatus(r, status) {
@@ -289,10 +284,11 @@ export default function DromicReports() {
       <LoadError message={loadError} onRetry={loadReports} />
       <PageHeader
         title="DROMIC Reports"
-        subtitle="Trends, performance metrics and downloadable reports"
+        subtitle="Shared PDF reports for evacuation operations"
         actions={<Button onClick={openPeriodReport}><Download size={14} />Generate Report</Button>}
       />
 
+      {isAdmin && <details className="glass rounded-glass p-4 mb-5"><summary className="cursor-pointer font-semibold text-sm">Analytics and period filters</summary><div className="mt-4">
       {/* Filters */}
       <div className="glass rounded-glass shadow-glass-sm p-3 mb-2 flex flex-wrap items-center gap-2">
         {PERIODS.map(p => (
@@ -354,19 +350,21 @@ export default function DromicReports() {
         </>
       )}
 
+      </div></details>}
+
       {/* Per-incident DROMIC reports */}
       <div className="flex flex-wrap items-end justify-between gap-3 mt-8 mb-3">
         <div>
           <h2 className="text-[1.0625rem] font-bold text-navy-900 m-0">Incident DROMIC Reports</h2>
-          <p className="text-[0.78125rem] text-navy-900/55 mt-0.5">One numbered report per disaster incident, with its own status</p>
+          <p className="text-[0.78125rem] text-navy-900/55 mt-0.5">Shared PDF report snapshots for each disaster incident</p>
         </div>
         <Button onClick={newIncidentReport}><Plus size={14} />New incident report</Button>
       </div>
 
-      <div className="glass rounded-glass shadow-glass-sm overflow-x-auto scroll-thin">
+      <div className="hidden md:block glass rounded-glass shadow-glass-sm overflow-x-auto scroll-thin">
         <table className="w-full min-w-[820px] border-collapse">
           <thead>
-            <tr>{['Report', 'Disaster', 'Barangay', 'As of', 'Prepared By', 'Status', ''].map(h => (
+            <tr>{['Report No.', 'Incident', 'As of', 'Status', 'Actions'].map(h => (
               <th key={h} className="text-left text-[0.6875rem] uppercase tracking-wide text-navy-900/45 font-semibold px-4 py-3">{h}</th>
             ))}</tr>
           </thead>
@@ -375,17 +373,12 @@ export default function DromicReports() {
               <tr key={r.report_id} className="border-b border-navy-900/8 cursor-pointer hover:bg-navy-900/4" onClick={() => viewSummary(r)}>
                 <td className="px-4 py-3 text-[0.78125rem] text-navy-900"><b>#{r.report_no ?? r.report_id}</b></td>
                 <td className="px-4 py-3 text-[0.78125rem] text-navy-900"><b>{r.disaster_name || '—'}</b></td>
-                <td className="px-4 py-3 text-[0.78125rem] text-navy-900/65">{r.brgy || '—'}</td>
                 <td className="px-4 py-3 text-[0.75rem] text-navy-900/55">{fmtAsOf(r.as_of || r.report_date)}</td>
-                <td className="px-4 py-3 text-[0.78125rem] text-navy-900/65">{r.author_first} {r.author_last}</td>
                 <td className="px-4 py-3"><Badge className={STATUS_PILL[r.reporting_status]}>{STATUS_LABEL[r.reporting_status]}</Badge></td>
                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                   <div className="flex gap-1.5 items-center">
-                    {isAdmin && r.reporting_status === 'Draft' && <Button size="sm" variant="ghost" onClick={() => setStatus(r, 'Active')}>Activate</Button>}
-                    {isAdmin && r.reporting_status === 'Active' && <Button size="sm" variant="ghost" onClick={() => finalize(r)}>Finalize</Button>}
-                    {r.reporting_status === 'Finalized' && <span className="flex items-center gap-1 text-[0.6875rem] text-navy-900/45 px-1"><Lock size={12} />Locked</span>}
-                    <Button size="sm" variant="ghost" onClick={() => downloadExcel(r)}><FileSpreadsheet size={13} />Excel</Button>
-                    <Button size="sm" variant="ghost" onClick={() => downloadPdf(r)}><Download size={13} />PDF</Button>
+                    <Button size="sm" variant="ghost" onClick={() => viewSummary(r)}>View report</Button>
+                    <Button size="sm" onClick={() => downloadPdf(r)}><Download size={13} />PDF</Button>
                   </div>
                 </td>
               </tr>
@@ -393,6 +386,14 @@ export default function DromicReports() {
           </tbody>
         </table>
       </div>
+      {!listLoading && <div className="md:hidden space-y-3">
+        {pager.items.map(report => <article key={report.report_id} className="glass rounded-glass p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2"><span className="text-xs text-slate-500">Report #{report.report_no ?? report.report_id}</span><Badge className={STATUS_PILL[report.reporting_status]}>{STATUS_LABEL[report.reporting_status]}</Badge></div>
+          <h3 className="font-semibold text-sm break-words">{report.disaster_name || 'Incident report'}</h3>
+          <p className="text-xs text-slate-500">As of {fmtAsOf(report.as_of || report.report_date)}</p>
+          <div className="flex gap-2"><Button size="sm" variant="ghost" className="flex-1" onClick={() => viewSummary(report)}>View report</Button><Button size="sm" className="flex-1" onClick={() => downloadPdf(report)}><Download size={14} />PDF</Button></div>
+        </article>)}
+      </div>}
       {!listLoading && !loadError && !reports.length && <SharedEmptyState title="No DROMIC reports yet" message="Use Generate Report above to prepare a report for the selected period or incident." />}
       {!listLoading && <Pagination pager={pager} />}
     </>
@@ -575,7 +576,6 @@ function PeriodReportForm({ form }) {
   const [type, setType] = useState(form.type);
   const [from, setFrom] = useState(form.from);
   const [to, setTo] = useState(form.to);
-  const [format, setFormat] = useState(form.format);
 
   // Monthly and quarterly reports fill in their own dates; custom keeps whatever was typed.
   function pickType(t) {
@@ -603,16 +603,7 @@ function PeriodReportForm({ form }) {
           <Ctrl><TextInput type="date" value={to} onChange={e => { setTo(e.target.value); form.to = e.target.value; }} /></Ctrl>
         </Field>
       </div>
-      <Field label="Format">
-        <div className="flex gap-2">
-          {[['pdf', 'PDF'], ['xlsx', 'Excel'], ['csv', 'CSV']].map(([v, label]) => (
-            <button key={v} type="button" onClick={() => { setFormat(v); form.format = v; }}
-              className={`px-4 py-2 rounded-xl text-[0.8125rem] font-semibold border transition ${format === v ? 'bg-accent-600 text-white border-transparent' : 'bg-white text-navy-900/75 border-navy-900/15'}`}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </Field>
+      <p className="text-sm font-semibold text-navy-900 mb-3">Output: PDF</p>
       <p className="text-[0.71875rem] text-navy-900/55">
         Covers {form.brgy ? `barangay ${form.brgy}` : 'all barangays'}. The figures are read from the live records when you generate the file.
       </p>

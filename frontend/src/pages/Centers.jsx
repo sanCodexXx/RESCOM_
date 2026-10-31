@@ -57,6 +57,7 @@ export default function Centers() {
   }, []);
 
   function centerModal(existing) {
+    if (!isAdmin) return;
     let form = existing
       ? { center_name: existing.center_name, barangay: existing.barangay, address: existing.address || '', capacity: existing.capacity, status: existing.status, image_url: existing.image_url || '' }
       : { center_name: '', barangay: '', address: '', capacity: '', status: 'Open', image_url: '' };
@@ -89,7 +90,7 @@ export default function Centers() {
       title: 'Remove center?',
       msg: `<b>${c.center_name}</b> will be permanently removed.`,
       onConfirm: async () => {
-        try { await api.del(`/centers/${c.center_id}`); toast('Center removed', 'bad'); load(); }
+        try { await api.del(`/centers/${c.center_id}`); toast('Center removed', 'ok'); load(); }
         catch (e) { toast(e.message, 'bad'); }
       }
     });
@@ -145,7 +146,7 @@ export default function Centers() {
       ),
       footer: <>
         <Button variant="ghost" block onClick={closeModal}>Close</Button>
-        <Button block onClick={() => { closeModal(); centerModal(c); }}><Edit2 size={14} />Edit Center</Button>
+        {isAdmin && <Button block onClick={() => { closeModal(); centerModal(c); }}><Edit2 size={14} />Edit Center</Button>}
       </>
     });
   }
@@ -153,7 +154,7 @@ export default function Centers() {
   return (
     <>
       <LoadError message={loadError} onRetry={load} />
-      <PageHeader title="Evacuation Centers" subtitle="Directory and live capacity of all designated centers"
+      <PageHeader title="Evacuation Centers" subtitle="Availability and current occupancy"
         actions={isAdmin && <Button onClick={() => centerModal(null)}><Plus size={14} />Add Center</Button>} />
 
       {loading && <Skeleton label="Loading centers" rows={3} />}
@@ -183,7 +184,7 @@ export default function Centers() {
           );
         })}
       </div>
-      {!loading && !loadError && !centers.length && <SharedEmptyState title="No evacuation centers yet" message="Add a designated center before registering evacuees." action={isAdmin ? "Add center" : undefined} onAction={() => centerModal(null)} />}
+      {!loading && !loadError && !centers.length && <SharedEmptyState title="No evacuation centers yet" message={isAdmin ? "Add a designated center before registering evacuees." : "An administrator must add an available center before registration."} action={isAdmin ? "Add center" : undefined} onAction={() => centerModal(null)} />}
       {!loading && <Pagination pager={pager} />}
     </>
   );

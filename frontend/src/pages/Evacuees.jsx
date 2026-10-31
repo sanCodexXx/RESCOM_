@@ -834,7 +834,7 @@ export default function Evacuees({ ctx }) {
       <LoadError message={loadError} onRetry={load} />
       <PageHeader
         title="Evacuees"
-        subtitle="Manage evacuee registrations, household information, evacuation assignments, and priority assistance."
+        subtitle="Registration, presence and priority assistance"
         actions={
           <Button onClick={registerModal}>
             <Plus size={15} />
@@ -854,13 +854,13 @@ export default function Evacuees({ ctx }) {
         gap-4
       ">
 
-        <SummaryCard
+        {isAdmin && <SummaryCard
           icon={<Users size={21} />}
           title="Registered Evacuees"
           value={loading ? '—' : formatNumber(evacuees.length)}
           description="All recorded evacuees"
           tone="blue"
-        />
+        />}
 
         <SummaryCard
           icon={<UserCheck size={21} />}
@@ -878,13 +878,13 @@ export default function Evacuees({ ctx }) {
           tone="pink"
         />
 
-        <SummaryCard
+        {isAdmin && <SummaryCard
           icon={<LogOut size={21} />}
           title="Checked Out"
           value={loading ? '—' : formatNumber(checkedOutCount)}
           description="Records marked checked out"
           tone="amber"
-        />
+        />}
 
       </div>
 

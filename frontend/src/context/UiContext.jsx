@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 
 function uid() { return 'T-' + Math.random().toString(36).slice(2, 8); }
 
@@ -10,21 +10,18 @@ export function UiProvider({ children }) {
   const [confirm, setConfirm] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  const timers = useRef(new Set());
-  useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
   const dismissToast = useCallback(id => setToasts(t => t.filter(x => x.id !== id)), []);
   const toast = useCallback((msg, kind = 'ok') => {
     const id = uid();
-    setToasts(t => [...t.slice(-3), { id, msg, kind }]);
-    const timer = setTimeout(() => { dismissToast(id); timers.current.delete(timer); }, kind === 'bad' ? 10000 : 6000);
-    timers.current.add(timer);
+    setToasts(t => t.some(item => item.msg === msg && item.kind === kind) ? t : [{ id, msg, kind }]);
+
   }, []);
 
   const openModal = useCallback((cfg) => setModal(cfg), []);
   const closeModal = useCallback(() => setModal(null), []);
   const openConfirm = useCallback((cfg) => setConfirm(cfg), []);
   const closeConfirm = useCallback(() => setConfirm(null), []);
-  // Compatibility helper: routine success feedback uses a nonblocking toast.
+  // Compatibility helper: routine feedback uses the centered shared popup.
   const openSuccess = useCallback(cfg => {
     const value = typeof cfg === 'string' ? { title: cfg } : cfg;
     toast([value.title, value.message].filter(Boolean).join(' '), 'ok');

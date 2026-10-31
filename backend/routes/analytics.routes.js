@@ -7,7 +7,7 @@ const express = require('express');
 const db = require('../db');
 const { verifyToken } = require('../middleware/auth');
 const { compileFigures } = require('../utils/figures');
-const { buildDromicPdf, buildDromicXlsx } = require('../utils/dromicPdf');
+const { buildDromicPdf } = require('../utils/dromicPdf');
 
 const router = express.Router();
 router.use(verifyToken);
@@ -210,7 +210,7 @@ router.get('/overview', async (req, res) => {
   }
 });
 
-// ---------- period report (PDF / Excel / CSV) ----------
+// ---------- period report (PDF) ----------
 
 async function incidentsInPeriod(from, to, brgy) {
   const { rows } = await db.query(`
@@ -222,7 +222,7 @@ async function incidentsInPeriod(from, to, brgy) {
   return rows;
 }
 
-// Same shape as a per-incident DROMIC report, so the existing PDF and Excel builders fill in.
+// Same shape as a per-incident DROMIC report, so the existing PDF builder fill in.
 async function periodData({ from, to, brgy }, type, userId) {
   const [figures, incidents, userRes] = await Promise.all([
     compileFigures({ from, to, brgy }),
@@ -274,67 +274,21 @@ async function periodData({ from, to, brgy }, type, userId) {
   };
 }
 
-const csvCell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-const shortDate = d => (d ? new Date(d).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }) : '');
-
-function toCsv({ report, totals, byOrigin, centers, incidents }) {
-  const rows = [];
-  const line = (...cells) => rows.push(cells.map(csvCell).join(','));
-  const p = report.period;
-
-  line('RESCOM Situational Report');
-  line('Report', report.disaster_name);
-  line('Period', p.label);
-  line('Barangay of origin', report.brgy || 'All barangays');
-  line('Generated', shortDate(new Date()));
-  rows.push('');
-  line('SUMMARY');
-  line('Incidents logged', p.incidents);
-  line('Incidents resolved', p.resolved);
-  line('Families registered', totals.families_cum);
-  line('Persons registered', totals.persons_cum);
-  line('Persons currently in centers', totals.persons_now);
-  line('Evacuation centers used', totals.centers_cum);
-  rows.push('');
-  line('INCIDENTS');
-  line('Incident', 'Type', 'Barangay', 'Severity', 'Status', 'Logged', 'Ended');
-  incidents.forEach(i => line(i.disaster_name, i.disaster_type, i.brgy, i.severity, i.reporting_status, shortDate(i.date_started), shortDate(i.date_ended)));
-  rows.push('');
-  line('AFFECTED BY BARANGAY OF ORIGIN');
-  line('Barangay', 'Families', 'Persons');
-  byOrigin.forEach(b => line(b.barangay, b.families, b.persons));
-  rows.push('');
-  line('EVACUATION CENTERS');
-  line('Center', 'Barangay', 'Capacity', 'Families registered', 'Persons registered', 'Families now', 'Persons now', 'Male now', 'Female now');
-  centers.forEach(c => line(c.center_name, c.barangay, c.capacity, c.families_cum, c.persons_cum, c.families_now, c.persons_now, c.male_now, c.female_now));
-  return '\uFEFF' + rows.join('\r\n') + '\r\n';
-}
-
-// GET /api/analytics/export?type=monthly|quarterly|custom&from=&to=&brgy=&format=pdf|xlsx|csv
+// GET /api/analytics/export?type=monthly|quarterly|custom&from=&to=&brgy=&format=pdf
 router.get('/export', async (req, res) => {
   const p = readPeriod(req.query);
   if (p.error) return res.status(400).json({ error: p.error });
   const type = TYPE_TITLE[req.query.type] ? req.query.type : 'custom';
-  const format = ['pdf', 'xlsx', 'csv'].includes(req.query.format) ? req.query.format : null;
-  if (!format) return res.status(400).json({ error: 'Format must be pdf, xlsx or csv.' });
+  if (req.query.format && req.query.format !== 'pdf') {
+    return res.status(400).json({ error: 'Reports are available as PDF only.' });
+  }
 
   const base = `Situational-Report-${p.from}-to-${p.to}${p.brgy ? '-' + p.brgy.replace(/[^\w-]+/g, '_') : ''}`;
   try {
     const data = await periodData(p, type, req.user.user_id);
-    if (format === 'pdf') {
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${base}.pdf"`);
-      return buildDromicPdf(data, res);
-    }
-    if (format === 'xlsx') {
-      const { buffer } = await buildDromicXlsx(data);
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="${base}.xlsx"`);
-      return res.send(buffer);
-    }
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${base}.csv"`);
-    return res.send(toCsv(data));
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${base}.pdf"`);
+    return buildDromicPdf(data, res);
   } catch (e) {
     console.error('analytics export failed:', e);
     if (!res.headersSent) res.status(500).json({ error: 'Could not build the report' });

@@ -1,3 +1,7 @@
+> **Current UI update:** centered feedback popups, focused Field Personnel views, collapsed Admin analysis, corrected center-edit permissions and PDF-only reporting. Start with UPDATE_GUIDE.md.
+
+> **PDF-only reporting:** Excel/CSV report options were removed following the MDRRMO interview. See the first section of UPDATE_GUIDE.md for the four replacement files.
+
 > **Updated project:** Start with [UPDATE_GUIDE.md](UPDATE_GUIDE.md) and [REVIEW_REPORT.md](REVIEW_REPORT.md). For an existing database, apply the additive `backend/migrations/004_user_status.sql` migration. The fresh-install `schema.sql` below drops existing tables. Keep your existing environment files.
 
 # RESCOM — Real-time Evacuation Status Coordination and Monitoring
