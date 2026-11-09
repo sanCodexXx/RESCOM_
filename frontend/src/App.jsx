@@ -5,7 +5,7 @@ import { Toasts } from './components/ui/Toasts.jsx';
 import { Skeleton } from './components/ui/DataStates.jsx';
 import Shell from './components/layout/Shell.jsx';
 import { useOfflineAccess } from './components/ui/OfflineAccess.jsx';
-import { isPrepared } from './lib/sync.js';
+import { canOpenOffline } from './lib/sync.js';
 
 import Login from './pages/auth/Login.jsx';
 import Register from './pages/auth/Register.jsx';
@@ -43,7 +43,7 @@ export default function App() {
   const [authView, setAuthView] = useState('login');
   const [route, setRoute] = useState('dashboard');
   const [ctx, setCtx] = useState({});
-  const openOffline = useOfflineAccess();
+  const { openOffline } = useOfflineAccess({ restore: true });
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
 
   // Open the sidebar when the window grows to desktop width, close it when it shrinks to mobile.
@@ -73,7 +73,7 @@ export default function App() {
     <>
       {!user ? (
         <Suspense fallback={null}>
-          <AuthPage goto={setAuthView} openOffline={isPrepared() ? openOffline : undefined} />
+          <AuthPage goto={setAuthView} openOffline={canOpenOffline() ? openOffline : undefined} />
         </Suspense>
       ) : (
         <Shell

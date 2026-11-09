@@ -59,40 +59,76 @@ export function readDevice() {
   return stored('device', 'readonly', store => store.get('profile'));
 }
 
+function workerHasShell(worker, entry) {
+  if (!worker) return Promise.resolve(false);
+  return new Promise(resolve => {
+    const channel = new MessageChannel();
+    const finish = ready => {
+      clearTimeout(timeout);
+      channel.port1.close();
+      resolve(ready);
+    };
+    const timeout = setTimeout(() => finish(false), 1000);
+    channel.port1.onmessage = event => finish(event.data === true);
+    worker.postMessage({ type: 'rescom:offline-shell', entry }, [channel.port2]);
+  });
+}
+
 export async function prepareShell() {
   if (!import.meta.env.PROD || !navigator.serviceWorker || !navigator.locks || !globalThis.crypto?.subtle || !globalThis.indexedDB) {
     throw new Error('Prepare this device using the RESCOM production build over HTTPS or localhost in an up-to-date browser.');
   }
-  await navigator.serviceWorker.register('/rescom-sw.js', { updateViaCache: 'none' });
-  if (navigator.serviceWorker.controller) return;
+  const entry = new URL(document.querySelector('script[type="module"][src]').src).pathname;
+  const workers = navigator.serviceWorker;
+  const registration = await workers.register('/rescom-sw.js', { updateViaCache: 'none' });
+  if (await workerHasShell(workers.controller, entry)) return;
+  if (registration.active && !registration.installing && !registration.waiting) await registration.update();
 
   await new Promise((resolve, reject) => {
-    const workers = navigator.serviceWorker;
-    const done = () => {
-      if (!workers.controller) return;
+    const check = async () => {
+      if (!await workerHasShell(workers.controller, entry)) return;
       clearTimeout(timeout);
-      workers.removeEventListener('controllerchange', done);
+      workers.removeEventListener('controllerchange', check);
       resolve();
     };
     const timeout = setTimeout(() => {
-      workers.removeEventListener('controllerchange', done);
+      workers.removeEventListener('controllerchange', check);
       reject(new Error('The offline screen is still downloading. Keep RESCOM open and try preparing again.'));
     }, 45000);
-    workers.addEventListener('controllerchange', done);
-    done();
+    workers.addEventListener('controllerchange', check);
+    check();
   });
 }
 
-export async function enrollDevice(ownerId, passphrase, workspace) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const vault = { ownerId, key: await deriveKey(passphrase, salt) };
-  const profile = { ownerId, salt, workspace: await seal(vault, 'workspace', workspace) };
+export async function loginFingerprint(token) {
+  const hash = await crypto.subtle.digest('SHA-256', encoder.encode(token));
+  return Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+export async function enrollDevice(ownerId, workspace, loginProof) {
+  const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  const vault = { ownerId, key };
+  const profile = { ownerId, key, loginProof, workspace: await seal(vault, 'workspace', workspace) };
   await stored('device', 'readwrite', store => store.add(profile, 'profile'));
   navigator.storage?.persist?.().catch(() => {});
   return { vault, workspace };
 }
 
-export async function unlockDevice(profile, passphrase) {
+export async function openSavedDevice(profile) {
+  const vault = { ownerId: profile.ownerId, key: profile.key };
+  return { vault, workspace: await unseal(vault, 'workspace', profile.workspace) };
+}
+
+export function rememberDeviceLogin(vault, loginProof, validate) {
+  return navigator.locks.request('rescom-workspace', async () => {
+    const profile = await readDevice();
+    validate();
+    if (profile?.ownerId !== vault.ownerId) throw new Error('This browser is prepared for another account.');
+    await stored('device', 'readwrite', store => store.put({ ...profile, key: vault.key, loginProof }, 'profile'));
+  });
+}
+
+export async function unlockLegacyDevice(profile, passphrase) {
   const vault = { ownerId: profile.ownerId, key: await deriveKey(passphrase, profile.salt) };
   try {
     if (profile.workspace) return { vault, workspace: await unseal(vault, 'workspace', profile.workspace) };

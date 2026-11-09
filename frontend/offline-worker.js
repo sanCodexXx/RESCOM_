@@ -1,14 +1,23 @@
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll([...SHELL_FILES])));
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll([...SHELL_FILES]);
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
-    for (const name of await caches.keys()) {
-      if (name.startsWith('rescom-shell-') && name !== CACHE_NAME) await caches.delete(name);
-    }
+    const previous = (await caches.keys()).filter(name => name.startsWith('rescom-shell-') && name !== CACHE_NAME);
+    await Promise.all(previous.slice(0, -1).map(name => caches.delete(name)));
     await self.clients.claim();
   })());
+});
+
+self.addEventListener('message', event => {
+  if (event.data?.type === 'rescom:offline-shell') {
+    event.ports[0]?.postMessage(SHELL_FILES.has(event.data.entry));
+  }
 });
 
 self.addEventListener('fetch', event => {
@@ -28,5 +37,7 @@ self.addEventListener('fetch', event => {
     })());
   } else if (SHELL_FILES.has(url.pathname)) {
     event.respondWith(caches.open(CACHE_NAME).then(async cache => (await cache.match(url.pathname)) || fetch(event.request)));
+  } else if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(caches.match(event.request).then(saved => saved || fetch(event.request)));
   }
 });

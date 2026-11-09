@@ -11,11 +11,9 @@ import {
   RefreshCw,
   ArrowUpRight,
   MapPin,
-  Clock3,
   Activity,
   CheckCircle2,
   CircleAlert,
-  CalendarDays,
 } from 'lucide-react';
 
 import {
@@ -44,7 +42,6 @@ import Badge, {
   SEV_PILL,
 } from '../components/ui/Badge.jsx';
 
-import WeatherCard from '../components/ui/WeatherCard.jsx';
 
 import Button from '../components/ui/Button.jsx';
 
@@ -99,24 +96,6 @@ function getOccupancyStatus(percentage) {
   if (percentage >= 70) return 'High Occupancy';
 
   return 'Available';
-}
-
-
-function formatDate(value) {
-  if (!value) return 'Date unavailable';
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return 'Date unavailable';
-  }
-
-  return date.toLocaleDateString('en-PH', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'Asia/Manila',
-  });
 }
 
 
@@ -245,7 +224,6 @@ export default function Dashboard({ onNav }) {
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [lastUpdated, setLastUpdated] = useState(null);
 
   const navigate = useCallback(
     (page) => {
@@ -300,8 +278,6 @@ export default function Dashboard({ onNav }) {
           ? evacueesResponse
           : []
       );
-
-      setLastUpdated(new Date());
     } catch (error) {
       setLoadError(error.message || 'Unable to load dashboard.');
       toast(
@@ -461,46 +437,13 @@ export default function Dashboard({ onNav }) {
       <PageHeader
         title="Overview"
         subtitle="Evacuation operations in San Nicolas, Ilocos Norte."
-      />
-
-
-      {/* =================================================
-          DASHBOARD TOOLBAR
-      ================================================= */}
-
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-
-
-        <div className="flex items-center gap-3">
-
-          {lastUpdated && (
-            <span className="text-[0.6875rem] text-navy-900/45">
-              Updated {lastUpdated.toLocaleTimeString('en-PH', {
-                hour: '2-digit',
-                minute: '2-digit',
-                timeZone: 'Asia/Manila',
-              })}
-            </span>
-          )}
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={load}
-            disabled={loading}
-            aria-label="Refresh dashboard"
-          >
-            <RefreshCw
-              size={14}
-              className={loading ? 'animate-spin' : ''}
-            />
-
+        actions={
+          <Button size="sm" variant="ghost" disabled={loading} onClick={load} aria-label="Refresh dashboard">
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             Refresh
           </Button>
-
-        </div>
-      </div>
-
+        }
+      />
 
       {/* =================================================
           KEY STATISTICS
@@ -545,13 +488,6 @@ export default function Dashboard({ onNav }) {
         />
 
       </div>
-
-
-      {/* =================================================
-          WEATHER
-      ================================================= */}
-
-      <details className="glass rounded-glass p-4"><summary className="cursor-pointer font-semibold text-sm">Local weather</summary><div className="mt-3"><WeatherCard /></div></details>
 
 
       {/* =================================================
@@ -1219,13 +1155,6 @@ export default function Dashboard({ onNav }) {
 
                           {incident.brgy || 'Location unavailable'}
                         </span>
-
-                        <span className="text-[0.6875rem] text-navy-900/45 flex items-center gap-1">
-                          <Clock3 size={11} />
-
-                          {formatDate(incident.date_started)}
-                        </span>
-
                       </div>
 
 

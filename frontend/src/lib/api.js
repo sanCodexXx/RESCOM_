@@ -1,5 +1,5 @@
 import { isLocalId } from './fieldData.js';
-import { flushFieldWrites, openOffline, readFieldData, retryFieldWrites, saveFieldChange } from './sync.js';
+import { flushFieldWrites, openOffline, readFieldData, restoreOffline, retryFieldWrites, saveFieldChange } from './sync.js';
 
 const BASE_URL = import.meta.env?.VITE_API_URL || 'http://localhost:5000';
 
@@ -71,7 +71,9 @@ export const api = {
   },
   postForm: (path, obj) => save(path, { method: 'POST', body: toFormData(obj), formData: true }),
   putForm: (path, obj) => save(path, { method: 'PUT', body: toFormData(obj), formData: true }),
-  openOffline: (user, passphrase, confirmation) => openOffline(request, BASE_URL, user, passphrase, confirmation),
+  getSession: (token, timeoutMs) => request('/auth/me', { token, timeoutMs }),
+  openOffline: (user, passphrase) => openOffline(request, BASE_URL, user, passphrase),
+  restoreOffline: () => restoreOffline(BASE_URL),
   syncOffline: () => flushFieldWrites(request),
   retryOffline: () => retryFieldWrites(request),
   // Downloads a binary response (PDF, etc.) as a Blob, with auth header.

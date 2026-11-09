@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ArrowRight, Clock3 } from 'lucide-react';
-import AuthLayout, { AuthField, PasswordField } from './AuthLayout.jsx';
+import { AtSign, Clock3, Lock, Mail, User } from 'lucide-react';
+import { AuthCard, AuthField, PasswordField, RegisterLayout } from './AuthLayout.jsx';
 import Button from '../../components/ui/Button.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useUi } from '../../context/UiContext.jsx';
@@ -62,45 +62,45 @@ export default function Register({ goto }) {
   }
 
   return (
-    <AuthLayout>
-      {pending ? <>
-        <header className="auth-heading">
-          <div className="auth-step-icon"><Clock3 size={21} /></div>
-          <h1>Request submitted.</h1>
-          <p className="auth-subtitle">An MDRRMO administrator will review your request for {roles.find(role => role.value === form.role)?.label} access.</p>
-        </header>
-        <button type="button" className="auth-primary" onClick={() => goto('login')}>Back to sign in <ArrowRight size={17} /></button>
-      </> : <>
-        <header className="auth-heading">
-          <h2>Create an account.</h2>
-          <p className="auth-subtitle">Enter your details and request your RESCOM role.</p>
-        </header>
-        <form className="auth-form auth-register-form" onSubmit={submit}>
-          <AuthField label="Full name" autoComplete="name" value={form.name} onChange={change('name')} maxLength={201} required />
-          <AuthField label="Email address" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} value={form.email} onChange={change('email')} maxLength={150} required />
-          <AuthField label="Username" autoComplete="username" autoCapitalize="none" spellCheck={false} value={form.username} onChange={change('username')} maxLength={100} required />
-          <div className="auth-field-grid">
-            <PasswordField label="Password" autoComplete="new-password" value={form.password} onChange={change('password')} minLength={6} required />
-            <PasswordField label="Confirm password" autoComplete="new-password" value={form.confirm} onChange={change('confirm')} minLength={6} required />
-          </div>
-          <fieldset className="auth-roles">
-            <legend>Role</legend>
-            <div className="auth-role-grid">{roles.map(role => (
-              <label key={role.value} className="auth-role">
-                <input type="radio" name="role" value={role.value} checked={form.role === role.value} onChange={change('role')} required />
-                {role.label}
-              </label>
-            ))}</div>
-          </fieldset>
-          <div className="auth-terms">
-            <label className="auth-check"><input type="checkbox" aria-label="I accept the terms and privacy policy" checked={agree} onChange={event => setAgree(event.target.checked)} /> I accept the</label>
-            <button type="button" className="auth-link" onClick={reviewTerms}>Terms and Privacy Policy</button>
-          </div>
-          {error && <p className="auth-error" role="alert">{error}</p>}
-          <button type="submit" className="auth-primary" disabled={busy}>{busy ? 'Submitting…' : 'Create account'} <ArrowRight size={17} /></button>
-        </form>
-        <p className="auth-switch">Already have an account? <button type="button" className="auth-link" onClick={() => goto('login')}>Sign in</button></p>
-      </>}
-    </AuthLayout>
+    <RegisterLayout>
+      <AuthCard>
+        {pending ? <>
+          <header className="auth-heading">
+            <div className="auth-step-icon"><Clock3 size={21} /></div>
+            <h1>Request Submitted</h1>
+            <p className="auth-subtitle">An MDRRMO administrator will review your request for {roles.find(role => role.value === form.role)?.label} access.</p>
+          </header>
+          <button type="button" className="auth-primary" onClick={() => goto('login')}>Back to Login</button>
+        </> : <>
+          <header className="auth-heading">
+            <h1>Create Your Account</h1>
+            <p className="auth-subtitle">Enter your details to finish signing up</p>
+          </header>
+          <form className="auth-form auth-register-form" onSubmit={submit}>
+            <AuthField label="Full name" hideLabel leading={<User size={16} />} placeholder="Full Name" autoComplete="name" value={form.name} onChange={change('name')} maxLength={201} required />
+            <AuthField label="Email address" hideLabel leading={<Mail size={16} />} placeholder="Email Address" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} value={form.email} onChange={change('email')} maxLength={150} required />
+            <AuthField label="Username" hideLabel leading={<AtSign size={16} />} placeholder="Username" autoComplete="username" autoCapitalize="none" spellCheck={false} value={form.username} onChange={change('username')} maxLength={100} required />
+            <PasswordField label="Password" hideLabel leading={<Lock size={16} />} placeholder="Password" autoComplete="new-password" value={form.password} onChange={change('password')} minLength={6} required />
+            <PasswordField label="Confirm password" hideLabel leading={<Lock size={16} />} placeholder="Confirm Password" autoComplete="new-password" value={form.confirm} onChange={change('confirm')} minLength={6} required />
+            <fieldset className="auth-roles">
+              <legend>Requested role</legend>
+              <div className="auth-role-grid">{roles.map(role => (
+                <label key={role.value} className="auth-role">
+                  <input type="radio" name="role" value={role.value} checked={form.role === role.value} onChange={change('role')} required />
+                  {role.label}
+                </label>
+              ))}</div>
+            </fieldset>
+            <div className="auth-terms">
+              <label className="auth-check"><input type="checkbox" aria-label="I accept the terms and privacy policy" checked={agree} onChange={event => setAgree(event.target.checked)} /> I accept the</label>
+              <button type="button" className="auth-link" onClick={reviewTerms}>terms and privacy policy</button>
+            </div>
+            {error && <p className="auth-error" role="alert">{error}</p>}
+            <button type="submit" className="auth-primary" disabled={busy}>{busy ? 'Submitting…' : 'Sign Up'}</button>
+          </form>
+          <p className="auth-switch">Already have an account? <button type="button" className="auth-link" onClick={() => goto('login')}>Login</button></p>
+        </>}
+      </AuthCard>
+    </RegisterLayout>
   );
 }

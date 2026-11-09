@@ -3,7 +3,7 @@ import { RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useUi } from '../../context/UiContext.jsx';
 import { api, BASE_URL } from '../../lib/api.js';
-import { discardReviewedWrite, isPrepared, refreshRecords, setReachable, subscribeSync, syncStatus } from '../../lib/sync.js';
+import { discardReviewedWrite, isPrepared, needsOfflineUpgrade, refreshRecords, setReachable, subscribeSync, syncStatus } from '../../lib/sync.js';
 import Button from './Button.jsx';
 import { useOfflineAccess } from './OfflineAccess.jsx';
 
@@ -37,7 +37,7 @@ function SyncReview() {
 export default function ConnectionStatus() {
   const { refreshSession, signInToSync } = useAuth();
   const { openModal } = useUi();
-  const openOffline = useOfflineAccess();
+  const { openOffline, preparing } = useOfflineAccess();
   const { unlocked, pending, review, syncing, needsSignIn, reachable } = useSyncExternalStore(subscribeSync, syncStatus);
   const [checking, setChecking] = useState(true);
   const [offline, setOffline] = useState(!navigator.onLine);
@@ -101,8 +101,9 @@ export default function ConnectionStatus() {
       <RefreshCw size={14} className={checking ? 'animate-spin' : ''} />
     </button>
     {!unlocked && (isPrepared() || connection === 'online') && (
-      <button type="button" className="connection-offline-action" onClick={openOffline}>
-        <WifiOff size={14} aria-hidden="true" /> {isPrepared() ? 'Unlock offline data' : 'Enable offline access'}
+      <button type="button" className="connection-offline-action" disabled={preparing} onClick={openOffline}>
+        <WifiOff size={14} aria-hidden="true" />
+        {preparing ? 'Preparing offline access…' : needsOfflineUpgrade() ? 'Upgrade offline access' : isPrepared() ? 'Open offline data' : 'Enable offline access'}
       </button>
     )}
     {!unlocked && !reachable && !isPrepared() && <span>Enable offline access while connected to save on this browser.</span>}

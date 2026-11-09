@@ -1,4 +1,7 @@
-import { enrollDevice, prepareShell, readDevice, readQueue, readWorkspace, removeEntry, unlockDevice, updateWorkspace } from './offline.js';
+import {
+  enrollDevice, loginFingerprint, openSavedDevice, prepareShell, readDevice, readQueue, readWorkspace,
+  rememberDeviceLogin, removeEntry, unlockLegacyDevice, updateWorkspace
+} from './offline.js';
 import { acceptFieldWrite, FIELD_VIEWS, fieldSave, fieldView, hasLocalReferences, projectedViews, resolveChange } from './fieldData.js';
 import { registrationPayload } from './registration.js';
 
@@ -42,7 +45,10 @@ export function subscribeSync(listener) {
 }
 
 export const syncStatus = () => status;
-export const isPrepared = () => localStorage.getItem('rescom_offline_ready') === '1';
+const deviceMode = () => localStorage.getItem('rescom_offline_ready');
+export const needsOfflineUpgrade = () => deviceMode() === '1';
+export const isPrepared = () => needsOfflineUpgrade() || deviceMode() === 'device';
+export const canOpenOffline = () => needsOfflineUpgrade() || (isPrepared() && Boolean(currentToken()));
 export const refreshRecords = () => window.dispatchEvent(new Event('rescom:records-updated'));
 
 function deviceIdentity(user) {
@@ -83,60 +89,112 @@ async function changeWorkspace(session, change) {
   return workspace;
 }
 
-async function seedWorkspace(request, apiOrigin, user) {
-  const token = currentToken();
-  if (!user || verified?.user.user_id !== user.user_id || verified.token !== token || !token) {
+function verifiedAccount(ownerId, token) {
+  return Boolean(token && verified?.user.user_id === ownerId && verified.token === token && token === currentToken());
+}
+
+function checkAccess(ownerId, token, revision) {
+  if (revision !== accessRevision || token !== currentToken() || (verified && verified.user.user_id !== ownerId)) {
+    throw new Error('Sign in with the account that prepared this browser.');
+  }
+}
+
+function activate(session, apiOrigin, token, revision, trusted) {
+  if (session.workspace.apiOrigin !== apiOrigin) {
+    throw new Error('This browser was prepared for a different RESCOM server.');
+  }
+  checkAccess(session.vault.ownerId, token, revision);
+  if (active?.vault.ownerId !== session.vault.ownerId) {
+    session.revision = 0;
+    active = session;
+  }
+  localStorage.setItem('rescom_offline_ready', trusted ? 'device' : '1');
+  publish();
+  return active.workspace.user;
+}
+
+async function seedWorkspace(request, apiOrigin, user, token) {
+  if (!user || !verifiedAccount(user.user_id, token) || !navigator.onLine) {
     throw new Error('Sign in while connected to prepare RESCOM for offline use.');
   }
   await prepareShell();
   const views = Object.fromEntries(await Promise.all(
     FIELD_VIEWS.map(async path => [path, await request(path, { token })])
   ));
-  if (token !== currentToken()) throw new Error('Sign in with the same account to prepare this browser.');
+  if (!verifiedAccount(user.user_id, token)) throw new Error('Sign in with the same account to prepare this browser.');
   return { user: deviceIdentity(user), apiOrigin, views, queue: [], aliases: {} };
 }
 
-export async function openOffline(request, apiOrigin, user, passphrase, confirmation) {
+export async function restoreOffline(apiOrigin, savedProfile) {
+  const token = currentToken();
+  if (!token || (!savedProfile && !isPrepared())) return null;
+  const revision = accessRevision;
+  const profile = savedProfile || await readDevice();
+  if (!profile) return null;
+  const confirmed = verifiedAccount(profile.ownerId, token);
+  const session = active?.vault.ownerId === profile.ownerId ? active : null;
+  if (!profile.key && (!session || !confirmed)) return null;
+
+  const proof = await loginFingerprint(token);
+  if (!confirmed && profile.loginProof !== proof) return null;
+  const saved = session || await openSavedDevice(profile);
+  if (saved.workspace.apiOrigin !== apiOrigin) return null;
+  if (confirmed && profile.loginProof !== proof) {
+    if (!profile.key) await prepareShell();
+    await rememberDeviceLogin(saved.vault, proof, () => checkAccess(profile.ownerId, token, revision));
+  }
+  return activate(saved, apiOrigin, token, revision, true);
+}
+
+export async function openOffline(request, apiOrigin, user, passphrase) {
+  const token = currentToken();
   const revision = accessRevision;
   const profile = await readDevice();
-  let session;
-  if (profile) {
-    if (user && user.user_id !== profile.ownerId) {
-      throw new Error('This browser is prepared for another account. Use a separate browser profile.');
-    }
-    session = await unlockDevice(profile, passphrase);
-    if (!session.workspace) {
-      const workspace = await seedWorkspace(request, apiOrigin, user);
-      const legacy = await readQueue(session.vault);
-      workspace.queue = legacy.map(entry => ({
-        id: entry.id, legacy: true, kind: 'registration', label: 'Evacuee registration',
-        path: '/evacuees/offline-registrations', method: 'POST', files: [],
-        body: {
-          ...registrationPayload(entry.form), owner_id: profile.ownerId, submission_id: entry.id,
-          captured_at: new Date(entry.createdAt).toISOString()
-        },
-        createdAt: new Date(entry.createdAt).toISOString(), review: entry.review
-      }));
-      session.workspace = await updateWorkspace(session.vault, current => current || workspace);
-    }
-  } else {
-    if (passphrase.trim().length < 16 || passphrase !== confirmation) {
-      throw new Error('Enter the same offline passphrase of at least 16 characters twice.');
-    }
-    const workspace = await seedWorkspace(request, apiOrigin, user);
-    session = await enrollDevice(user.user_id, passphrase, workspace);
+  if (profile && user && user.user_id !== profile.ownerId) {
+    throw new Error('This browser is prepared for another account. Use a separate browser profile.');
   }
-  if (session.workspace.apiOrigin !== apiOrigin) {
-    throw new Error('This browser was prepared for a different RESCOM server.');
-  }
-  if (revision !== accessRevision || (verified && verified.user.user_id !== session.vault.ownerId)) {
+  if (profile?.key) {
+    const restored = await restoreOffline(apiOrigin, profile);
+    if (restored) return restored;
     throw new Error('Sign in with the account that prepared this browser.');
   }
-  session.revision = 0;
-  active = session;
-  localStorage.setItem('rescom_offline_ready', '1');
-  publish();
-  return session.workspace.user;
+  if (!profile) {
+    const workspace = await seedWorkspace(request, apiOrigin, user, token);
+    const proof = await loginFingerprint(token);
+    checkAccess(user.user_id, token, revision);
+    const session = await enrollDevice(user.user_id, workspace, proof);
+    return activate(session, apiOrigin, token, revision, true);
+  }
+
+  if (!passphrase) {
+    localStorage.setItem('rescom_offline_ready', '1');
+    publish();
+    throw new Error('Choose Upgrade offline access to transfer this browser’s previous saves.');
+  }
+  const session = await unlockLegacyDevice(profile, passphrase);
+  if (!session.workspace) {
+    const workspace = await seedWorkspace(request, apiOrigin, user, token);
+    const legacy = await readQueue(session.vault);
+    workspace.queue = legacy.map(entry => ({
+      id: entry.id, legacy: true, kind: 'registration', label: 'Evacuee registration',
+      path: '/evacuees/offline-registrations', method: 'POST', files: [],
+      body: {
+        ...registrationPayload(entry.form), owner_id: profile.ownerId, submission_id: entry.id,
+        captured_at: new Date(entry.createdAt).toISOString()
+      },
+      createdAt: new Date(entry.createdAt).toISOString(), review: entry.review
+    }));
+    session.workspace = await updateWorkspace(session.vault, current => current || workspace);
+  }
+
+  const trusted = verifiedAccount(profile.ownerId, token);
+  if (trusted) {
+    if (session.workspace.apiOrigin !== apiOrigin) throw new Error('This browser was prepared for a different RESCOM server.');
+    await prepareShell();
+    const proof = await loginFingerprint(token);
+    await rememberDeviceLogin(session.vault, proof, () => checkAccess(profile.ownerId, token, revision));
+  }
+  return activate(session, apiOrigin, token, revision, trusted);
 }
 
 function cachedView(session, path) {
@@ -154,7 +212,7 @@ export async function readFieldData(request, path) {
   const revision = session.revision;
   try {
     const data = await request(path, { token: verified.token });
-    if (active !== session) throw new Error('Unlock this account’s offline data to open this view.');
+    if (active !== session) throw new Error('Open this account’s offline data to load this view.');
     if (revision !== session.revision || !authenticated(session)) return cachedView(session, path);
     if (data != null) {
       await changeWorkspace(session, workspace => {
@@ -321,7 +379,7 @@ export function saveFieldChange(request, path, options) {
   const save = (async () => {
     const change = await createChange(path, options, descriptor, session);
     const persist = () => changeWorkspace(session, workspace => {
-      if (active !== session) throw new Error('Unlock this account’s offline data before saving.');
+      if (active !== session) throw new Error('Open this account’s offline data before saving.');
       session.revision++;
       return { ...workspace, queue: [...workspace.queue, change] };
     });
