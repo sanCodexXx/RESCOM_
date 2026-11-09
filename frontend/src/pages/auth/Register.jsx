@@ -15,7 +15,7 @@ const terms = (
     <h3 className="font-semibold">Terms of Service</h3>
     <p>This system is for authorized MDRRMO San Nicolas personnel and partners. Submit accurate reports only, keep your credentials private, and use evacuee data solely for disaster response coordination. Accounts that misuse the system may be disabled by Admin Staff without notice.</p>
     <h3 className="font-semibold">Privacy Policy</h3>
-    <p>We store your name, email, username, phone number and activity needed to coordinate evacuations. Evacuee records are visible only to signed-in staff and are never sold or shared outside disaster response and DROMIC reporting. You may request corrections to your account details at any time.</p>
+    <p>We store your name, email, username and account activity needed to coordinate evacuations. Evacuee records are visible only to signed-in staff and are never sold or shared outside disaster response and DROMIC reporting. You may request corrections to your account details at any time.</p>
   </div>
 );
 
@@ -64,19 +64,22 @@ export default function Register({ goto }) {
   return (
     <AuthLayout>
       {pending ? <>
-        <div className="auth-step-icon"><Clock3 size={21} /></div>
-        <h1>Request submitted.</h1>
-        <p className="auth-subtitle">An MDRRMO administrator will review your request for {roles.find(role => role.value === form.role)?.label} access.</p>
+        <header className="auth-heading">
+          <div className="auth-step-icon"><Clock3 size={21} /></div>
+          <h1>Request submitted.</h1>
+          <p className="auth-subtitle">An MDRRMO administrator will review your request for {roles.find(role => role.value === form.role)?.label} access.</p>
+        </header>
         <button type="button" className="auth-primary" onClick={() => goto('login')}>Back to sign in <ArrowRight size={17} /></button>
       </> : <>
-        <h1>Create an account.</h1>
-        <p className="auth-subtitle">Enter your details and request your RESCOM role.</p>
+        <header className="auth-heading">
+          <p className="auth-eyebrow">ACCOUNT REQUEST</p>
+          <h1>Create an account.</h1>
+          <p className="auth-subtitle">Enter your details and request your RESCOM role.</p>
+        </header>
         <form className="auth-form auth-register-form" onSubmit={submit}>
           <AuthField label="Full name" autoComplete="name" value={form.name} onChange={change('name')} maxLength={201} required />
-          <div className="auth-field-grid">
-            <AuthField label="Email address" type="email" autoComplete="email" value={form.email} onChange={change('email')} maxLength={150} required />
-            <AuthField label="Username" autoComplete="username" autoCapitalize="none" spellCheck={false} value={form.username} onChange={change('username')} maxLength={100} required />
-          </div>
+          <AuthField label="Email address" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} value={form.email} onChange={change('email')} maxLength={150} required />
+          <AuthField label="Username" autoComplete="username" autoCapitalize="none" spellCheck={false} value={form.username} onChange={change('username')} maxLength={100} required />
           <div className="auth-field-grid">
             <PasswordField label="Password" autoComplete="new-password" value={form.password} onChange={change('password')} minLength={6} required />
             <PasswordField label="Confirm password" autoComplete="new-password" value={form.confirm} onChange={change('confirm')} minLength={6} required />

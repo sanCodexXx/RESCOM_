@@ -1,54 +1,49 @@
-import React, { useId, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import logo from '../../assets/SanNicolasLogo.png';
 import './AuthLayout.css';
 
-export function AuthField({ label, trailing, ...input }) {
+export function AuthField({ label, leading, trailing, ...input }) {
   const id = useId();
   return (
     <div className="auth-field">
       <label htmlFor={id}>{label}</label>
-      <div className="auth-field-control"><input id={id} {...input} />{trailing}</div>
+      <div className="auth-field-control">
+        {leading && <span className="auth-field-leading" aria-hidden="true">{leading}</span>}
+        <input id={id} {...input} />
+        {trailing}
+      </div>
     </div>
   );
 }
 
-export function PasswordField({ label = 'Password', ...input }) {
+export function PasswordField({ label = 'Password', disabled, ...input }) {
   const [visible, setVisible] = useState(false);
-  return <AuthField label={label} {...input} type={visible ? 'text' : 'password'} trailing={
-    <button className="auth-eye" type="button" onClick={() => setVisible(value => !value)} aria-label={`${visible ? 'Hide' : 'Show'} ${label.toLowerCase()}`}>
+  return <AuthField label={label} {...input} type={visible ? 'text' : 'password'} disabled={disabled} trailing={
+    <button className="auth-eye" type="button" disabled={disabled} onClick={() => setVisible(value => !value)} aria-label={`${visible ? 'Hide' : 'Show'} ${label.toLowerCase()}`}>
       {visible ? <EyeOff size={17} /> : <Eye size={17} />}
     </button>
   } />;
 }
 
-export function ForgotLayout({ children }) {
-  return (
-    <div className="min-h-screen bg-[#f4f5f7] flex items-center justify-center p-4 sm:p-6">
-      <div className="bg-white rounded-2xl shadow-2xl w-full min-w-0 max-w-[900px] grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10 p-6 sm:p-10 items-center">
-        {children}
-      </div>
-    </div>
-  );
-}
-
 export default function AuthLayout({ children }) {
+  useEffect(() => { window.scrollTo(0, 0); }, []);
+
   return (
     <main className="auth-screen">
-      <div className="auth-content">
+      <aside className="auth-feature">
         <div className="auth-brand">
           <img src={logo} alt="" width="40" height="40" />
-          <div><strong>RESCOM</strong><span>San Nicolas MDRRMO</span></div>
+          <div><strong>RESCOM</strong><span>San Nicolas</span></div>
         </div>
-        <div className="auth-form-area">{children}</div>
-      
-      </div>
-      <aside className="auth-feature" aria-hidden="true">
         <div className="auth-feature-copy">
-          <h2>Ready for<br />the field.</h2>
-          <span>Register evacuees, monitor centers, and coordinate your response.</span>
+          <h2>Ready for the field.</h2>
+          <p>Register evacuees, monitor centers, and coordinate your response.</p>
         </div>
       </aside>
+      <div className="auth-content">
+        <div className="auth-form-area">{children}</div>
+      </div>
     </main>
   );
 }

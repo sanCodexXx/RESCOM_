@@ -207,19 +207,18 @@ function genPin() {
   ).padStart(6, '0');
 }
 
-async function findResetUser(identifier) {
-  if (
-    !identifier ||
-    typeof identifier !== 'string'
-  ) {
-    return null;
-  }
+function getResetEmail(body) {
+  const { identifier, phone, channel } = body || {};
+  if (phone || (channel && channel !== 'email') || typeof identifier !== 'string') return null;
 
+  const email = identifier.trim();
+  return /^[^\s@]+@[^\s@]+$/.test(email) ? email : null;
+}
+
+async function findResetUser(email) {
   const { rows } = await db.query(
-    `SELECT * FROM USERS
-     WHERE username = $1 OR email = $1
-     LIMIT 1`,
-    [identifier.trim()]
+    'SELECT user_id, username, email FROM USERS WHERE email = $1',
+    [email]
   );
 
   return rows[0] || null;
@@ -227,29 +226,15 @@ async function findResetUser(identifier) {
 
 // Request password-reset PIN by email
 router.post('/forgot-password/request', async (req, res) => {
-  const {
-    identifier,
-    phone,
-    channel
-  } = req.body || {};
-
-  if (
-    !identifier ||
-    typeof identifier !== 'string'
-  ) {
+  const email = getResetEmail(req.body);
+  if (!email) {
     return res.status(400).json({
-      error: 'Enter your email or username'
-    });
-  }
-
-  if (phone || (channel && channel !== 'email')) {
-    return res.status(400).json({
-      error: 'Password recovery is available through email only.'
+      error: 'Enter the email address on your RESCOM account.'
     });
   }
 
   try {
-    const user = await findResetUser(identifier);
+    const user = await findResetUser(email);
 
     if (user && user.email) {
       const pin = genPin();
@@ -310,29 +295,16 @@ router.post('/forgot-password/request', async (req, res) => {
 
 // Verify email PIN
 router.post('/forgot-password/verify', async (req, res) => {
-  const {
-    identifier,
-    phone,
-    pin
-  } = req.body || {};
-
-  if (phone) {
+  const email = getResetEmail(req.body);
+  const { pin } = req.body || {};
+  if (!email || !/^\d{6}$/.test(String(pin || ''))) {
     return res.status(400).json({
-      error: 'Use email or username to reset your password.'
-    });
-  }
-
-  if (
-    !identifier ||
-    !/^\d{6}$/.test(String(pin || ''))
-  ) {
-    return res.status(400).json({
-      error: 'A valid 6-digit PIN is required'
+      error: 'An email address and a valid 6-digit PIN are required.'
     });
   }
 
   try {
-    const user = await findResetUser(identifier);
+    const user = await findResetUser(email);
 
     if (!user) {
       return res.status(400).json({
@@ -397,26 +369,16 @@ router.post('/forgot-password/verify', async (req, res) => {
 
 // Reset password after email verification
 router.post('/forgot-password/reset', async (req, res) => {
-  const {
-    identifier,
-    phone,
-    pin,
-    new_password
-  } = req.body || {};
-
-  if (phone) {
-    return res.status(400).json({
-      error: 'Use email or username to reset your password.'
-    });
-  }
+  const email = getResetEmail(req.body);
+  const { pin, new_password } = req.body || {};
 
   if (
-    !identifier ||
+    !email ||
     !/^\d{6}$/.test(String(pin || '')) ||
     !new_password
   ) {
     return res.status(400).json({
-      error: 'All fields are required'
+      error: 'An email address, a valid 6-digit PIN, and a new password are required.'
     });
   }
 
@@ -427,7 +389,7 @@ router.post('/forgot-password/reset', async (req, res) => {
   }
 
   try {
-    const user = await findResetUser(identifier);
+    const user = await findResetUser(email);
 
     if (!user) {
       return res.status(400).json({

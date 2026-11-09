@@ -31,8 +31,10 @@ export default function Login({ goto, openOffline }) {
 
   return (
     <AuthLayout>
-      <h1>Welcome back.</h1>
-      <p className="auth-subtitle">Sign in to continue to RESCOM.</p>
+      <header className="auth-heading">
+        <h1>Welcome back.</h1>
+        <p className="auth-subtitle">Sign in to continue to RESCOM.</p>
+      </header>
       <form className="auth-form" onSubmit={submit}>
         <AuthField label="Email or username" autoComplete="username" inputMode="email" autoCapitalize="none" spellCheck={false} value={username} onChange={event => setUsername(event.target.value)} required />
         <PasswordField autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required />

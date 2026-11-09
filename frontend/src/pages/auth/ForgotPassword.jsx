@@ -1,199 +1,225 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Lock, KeyRound, Mail, Phone, Info } from 'lucide-react';
-import { ForgotLayout } from './AuthLayout.jsx';
-import { Field, Ctrl, TextInput } from '../../components/ui/Field.jsx';
-import Button from '../../components/ui/Button.jsx';
+import React, { useEffect, useState } from 'react';
+import { ArrowLeft, Fingerprint, LockKeyhole, Mail } from 'lucide-react';
+import { AuthField, PasswordField } from './AuthLayout.jsx';
 import { useUi } from '../../context/UiContext.jsx';
 import { api } from '../../lib/api.js';
-import illustration from '../../assets/forgotpass.png';
+import './Recovery.css';
 
-// Same 3-step PIN flow as before (backend/routes/auth.routes.js), as its
-// own page instead of a modal, matching the reference layout:
-//   1) request a PIN (email by default, SMS optional)
-//   2) verify the 6-digit PIN
-//   3) set a new password
-//
-// Dev note: until SMTP/SMS is configured in backend/.env, nothing is
-// actually emailed/texted — the backend logs the PIN to its own console
-// AND returns it as `dev_pin` in the response, which this page shows
-// directly below the button so you don't have to dig through server logs
-// to test the flow. That banner disappears automatically once real
-// delivery is configured and working.
+const STEPS = {
+  1: {
+    icon: Fingerprint,
+    title: 'Forgot your password?',
+    description: 'Enter the email address on your RESCOM account.',
+    action: 'Send reset code',
+    pending: 'Sending…'
+  },
+  2: {
+    icon: Mail,
+    title: 'Verify your email',
+    description: 'Enter the 6-digit code from your email. It expires in 10 minutes.',
+    action: 'Verify code',
+    pending: 'Verifying…'
+  },
+  3: {
+    icon: LockKeyhole,
+    title: 'Reset your password',
+    description: 'Choose a new password for your RESCOM account.',
+    action: 'Reset password',
+    pending: 'Saving…'
+  }
+};
+
 export default function ForgotPassword({ goto }) {
-  const { toast, openSuccess } = useUi();
+  const { openSuccess } = useUi();
   const [step, setStep] = useState(1);
-  const [channel, setChannel] = useState('email');       // 'email' | 'sms'
-  const [emailVal, setEmailVal] = useState('');
-  const [phoneVal, setPhoneVal] = useState('');
+  const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
-  const [pw, setPw] = useState('');
-  const [pw2, setPw2] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
-  const [devPin, setDevPin] = useState(null);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
-  // Steps 2 and 3 must identify the account the same way step 1 did.
-  const who = () => (channel === 'email' ? { identifier: emailVal.trim() } : { phone: phoneVal.trim() });
+  useEffect(() => { window.scrollTo(0, 0); }, [step]);
 
-  async function requestPin(e) {
-    e?.preventDefault();
-    if (channel === 'email' && !emailVal.trim()) return toast('Enter your email or username.', 'bad');
-    if (channel === 'sms' && phoneVal.replace(/\D/g, '').length < 10) return toast('Enter a valid mobile number, e.g. 0917 123 4567.', 'bad');
-    setBusy(true);
-    setDevPin(null);
-    try {
-      const r = await api.post('/auth/forgot-password/request', { ...who(), channel }, { auth: false });
-      toast(r.dev_pin ? 'PIN generated (dev mode — see below)' : r.message, r.dev_pin ? 'warn' : 'ok');
-      if (r.dev_pin) setDevPin(r.dev_pin);
-      setStep(2);
-    } catch (e) { toast(e.message, 'bad'); }
-    finally { setBusy(false); }
-  }
-
-  async function verifyPin(e) {
-    e?.preventDefault();
-    if (pin.trim().length !== 6) return toast('Enter the 6-digit code.', 'bad');
-    setBusy(true);
-    try {
-      await api.post('/auth/forgot-password/verify', { ...who(), pin: pin.trim() }, { auth: false });
-      setStep(3);
-    } catch (e) { toast(e.message, 'bad'); }
-    finally { setBusy(false); }
-  }
-
-  async function resetPassword(e) {
-    e?.preventDefault();
-    if (pw.length < 6) return toast('Password must be at least 6 characters.', 'bad');
-    if (pw !== pw2) return toast('Passwords do not match.', 'bad');
-    setBusy(true);
-    try {
-      await api.post('/auth/forgot-password/reset', { ...who(), pin: pin.trim(), new_password: pw }, { auth: false });
-      openSuccess({ title: 'Password updated', message: 'You can now log in with your new password.' });
+  function back() {
+    if (step === 1) {
       goto('login');
-    } catch (e) { toast(e.message, 'bad'); }
-    finally { setBusy(false); }
+      return;
+    }
+    setError('');
+    setNotice('');
+    setStep(step - 1);
   }
 
-  const COPY = {
-    1: {
-      title: 'Forgot Password?',
-      sub: channel === 'email'
-        ? "No worries! Enter your email and we'll send you a code to reset your password."
-        : "No worries! Enter the mobile number saved on your account and we'll text you a code."
-    },
-    2: { title: 'Verify Your Code', sub: `We sent a 6-digit code to your ${channel === 'email' ? 'email' : 'mobile number by SMS'}. Enter it below — it expires in 10 minutes.` },
-    3: { title: 'Reset Your Password', sub: 'Create a new password for your account.' }
-  }[step];
+  async function requestPin(event) {
+    event.preventDefault();
+    if (busy) return;
+    setError('');
+    setNotice('');
+    setBusy(true);
+    try {
+      const result = await api.post('/auth/forgot-password/request', { identifier: email.trim() }, { auth: false });
+      if (step === 2) setNotice(result.message);
+      setPin('');
+      setStep(2);
+    } catch (problem) {
+      setError(problem.message || 'Could not request a reset code.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyPin(event) {
+    event.preventDefault();
+    if (busy) return;
+    setNotice('');
+    if (pin.length !== 6) {
+      setError('Enter the 6-digit code from your email.');
+      return;
+    }
+    setError('');
+    setBusy(true);
+    try {
+      await api.post('/auth/forgot-password/verify', { identifier: email.trim(), pin }, { auth: false });
+      setStep(3);
+    } catch (problem) {
+      setError(problem.message || 'Could not verify the code.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resetPassword(event) {
+    event.preventDefault();
+    if (busy) return;
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+    setError('');
+    setBusy(true);
+    try {
+      await api.post('/auth/forgot-password/reset', {
+        identifier: email.trim(), pin, new_password: password
+      }, { auth: false });
+      openSuccess({ title: 'Password updated', message: 'You can now sign in with your new password.' });
+      goto('login');
+    } catch (problem) {
+      setError(problem.message || 'Could not reset the password.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const { icon: Icon, title, description, action, pending } = STEPS[step];
+  const submit = [requestPin, verifyPin, resetPassword][step - 1];
+  const errorId = error ? 'recovery-error' : undefined;
 
   return (
-    <ForgotLayout>
-      <div>
-        <h1 className="text-[1.75rem] font-extrabold text-navy-900 mb-2 leading-tight">{COPY.title}</h1>
-        <p className="text-accent-700 text-[0.875rem] leading-relaxed mb-8 max-w-[340px]">{COPY.sub}</p>
-        <img src={illustration} alt="" className="w-full max-w-[320px] mx-auto md:mx-0" />
-      </div>
+    <main className="recovery-screen">
+      <section className="recovery-panel" aria-labelledby="recovery-title">
+        <header className="recovery-topbar">
+          <button className="recovery-back" type="button" aria-label="Go back" disabled={busy} onClick={back}>
+            <ArrowLeft size={21} aria-hidden="true" />
+          </button>
+          <strong>RESCOM</strong>
+        </header>
+        <div className="recovery-content">
+          <div className="recovery-heading" aria-live="polite">
+            <span className="recovery-icon"><Icon size={24} strokeWidth={1.6} aria-hidden="true" /></span>
+            <h1 id="recovery-title">{title}</h1>
+            <p>{description}</p>
+          </div>
 
-      <div>
-        {step === 1 && (
-          <form onSubmit={requestPin}>
-            {/* Email / Phone switch */}
-            <div role="tablist" aria-label="Send code to" className="grid grid-cols-2 gap-1 p-1 mb-5 rounded-xl bg-navy-900/[0.06]">
-              {[['email', 'Email', Mail], ['sms', 'Phone', Phone]].map(([key, label, Icon]) => (
-                <button
-                  key={key}
-                  type="button"
-                  role="tab"
-                  aria-selected={channel === key}
-                  onClick={() => setChannel(key)}
-                  className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-[0.8125rem] font-semibold transition ${channel === key ? 'bg-white text-navy-900 shadow-sm' : 'text-navy-900/50 hover:text-navy-900/80'}`}
-                >
-                  <Icon size={15} /> {label}
-                </button>
-              ))}
-            </div>
-
-            {channel === 'email' ? (
-              <Field label="Email Address or Username" key="email-field">
-                <Ctrl icon={<Mail size={16} />}>
-                  <TextInput
-                    type="text"
-                    autoComplete="username"
-                    placeholder="Enter your email address"
-                    value={emailVal}
-                    onChange={e => setEmailVal(e.target.value)}
-                    autoFocus
-                  />
-                </Ctrl>
-              </Field>
-            ) : (
-              <Field label="Mobile Number" key="phone-field">
-                <Ctrl icon={<Phone size={16} />}>
-                  <TextInput
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel"
-                    placeholder="09XX XXX XXXX"
-                    value={phoneVal}
-                    onChange={e => setPhoneVal(e.target.value.replace(/[^\d+\s()-]/g, ''))}
-                    autoFocus
-                  />
-                </Ctrl>
-                <div className="text-[0.71875rem] text-navy-900/50 mt-1.5">Use the mobile number saved on your account.</div>
-              </Field>
+          <form className="recovery-form" onSubmit={submit}>
+            {step === 1 && (
+              <AuthField
+                label="Email address"
+                leading={<Mail size={17} />}
+                type="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder="Enter your email address"
+                value={email}
+                onChange={event => setEmail(event.target.value)}
+                maxLength={150}
+                aria-describedby={errorId}
+                disabled={busy}
+                required
+              />
             )}
 
-            <Button type="submit" variant="dark" block disabled={busy}>
-              {busy ? 'Sending…' : channel === 'email' ? 'Send Code by Email' : 'Send Code by SMS'}
-            </Button>
-            <button type="button" onClick={() => goto('login')} className="w-full text-center text-[0.8125rem] font-semibold text-accent-700 hover:underline mt-5 flex items-center justify-center gap-1.5">
-              <ArrowLeft size={14} /> Back to Login
-            </button>
-          </form>
-        )}
-
-        {step === 2 && (
-          <form onSubmit={verifyPin}>
-            {devPin && (
-              <div className="flex items-start gap-2.5 bg-warn-bg text-warn rounded-xl px-3.5 py-3 mb-5 text-[0.75rem] leading-relaxed">
-                <Info size={15} className="shrink-0 mt-0.5" />
-                <div>
-                  <b className="block mb-0.5">Email/SMS isn't configured yet — here's your code for testing:</b>
-                  <span className="text-[1.25rem] font-extrabold tracking-[4px] block mt-1">{devPin}</span>
-                  <span className="opacity-80">Configure SMTP_HOST / SMTP_USER / SMTP_PASS in backend/.env to send this for real.</span>
+            {step === 2 && (
+              <div className="recovery-pin">
+                <input
+                  aria-label="6-digit code"
+                  aria-describedby={errorId}
+                  autoComplete="one-time-code"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  value={pin}
+                  onChange={event => setPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                  disabled={busy}
+                  required
+                />
+                <div className="recovery-pin-slots" aria-hidden="true">
+                  {Array.from({ length: 6 }, (_, index) => (
+                    <span key={index} data-current={index === Math.min(pin.length, 5)}>{pin[index]}</span>
+                  ))}
                 </div>
               </div>
             )}
-            <Field label="6-digit Code">
-              <Ctrl icon={<KeyRound size={16} />}>
-                <TextInput
-                  value={pin}
-                  onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="123456"
-                  inputMode="numeric"
-                  className="tracking-[6px] font-bold"
-                  autoFocus
-                />
-              </Ctrl>
-            </Field>
-            <Button type="submit" variant="dark" block disabled={busy}>{busy ? 'Verifying…' : 'Verify Code'}</Button>
-            <button type="button" onClick={requestPin} className="w-full text-center text-[0.75rem] font-semibold text-accent-700 hover:underline mt-3">Resend code</button>
-            <button type="button" onClick={() => setStep(1)} className="w-full text-center text-[0.8125rem] font-semibold text-accent-700 hover:underline mt-4 flex items-center justify-center gap-1.5">
-              <ArrowLeft size={14} /> Back
-            </button>
-          </form>
-        )}
 
-        {step === 3 && (
-          <form onSubmit={resetPassword}>
-            <Field label="New Password">
-              <Ctrl icon={<Lock size={16} />}><TextInput type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="At least 6 characters" autoFocus /></Ctrl>
-            </Field>
-            <Field label="Confirm New Password">
-              <Ctrl icon={<Lock size={16} />}><TextInput type="password" value={pw2} onChange={e => setPw2(e.target.value)} placeholder="Re-enter password" /></Ctrl>
-            </Field>
-            <Button type="submit" variant="dark" block disabled={busy}>{busy ? 'Saving…' : 'Reset Password'}</Button>
+            {step === 3 && (
+              <>
+                <PasswordField
+                  label="New password"
+                  leading={<LockKeyhole size={17} />}
+                  placeholder="At least 6 characters"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={event => setPassword(event.target.value)}
+                  minLength={6}
+                  disabled={busy}
+                  required
+                />
+                <PasswordField
+                  label="Confirm new password"
+                  leading={<LockKeyhole size={17} />}
+                  placeholder="Re-enter your new password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={event => setConfirmPassword(event.target.value)}
+                  minLength={6}
+                  aria-describedby={errorId}
+                  disabled={busy}
+                  required
+                />
+              </>
+            )}
+
+            {error && <p id="recovery-error" className="auth-error" role="alert">{error}</p>}
+            <button className="recovery-primary" type="submit" disabled={busy}>{busy ? pending : action}</button>
           </form>
-        )}
-      </div>
-    </ForgotLayout>
+
+          {step === 1 && (
+            <button className="recovery-link recovery-return" type="button" disabled={busy} onClick={() => goto('login')}>
+              <ArrowLeft size={16} aria-hidden="true" /> Back to sign in
+            </button>
+          )}
+          {step === 2 && (
+            <div className="recovery-resend">
+              <span>Didn’t get a code?</span> <button className="recovery-link" type="button" disabled={busy} onClick={requestPin}>Resend code</button>
+              {notice && <p role="status">{notice}</p>}
+            </div>
+          )}
+          {step === 3 && (
+            <button className="recovery-secondary" type="button" disabled={busy} onClick={() => goto('login')}>Cancel</button>
+          )}
+        </div>
+      </section>
+    </main>
   );
 }
