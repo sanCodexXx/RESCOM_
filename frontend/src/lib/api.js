@@ -1,39 +1,45 @@
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { isLocalId } from './fieldData.js';
+import { flushFieldWrites, openOffline, readFieldData, retryFieldWrites, saveFieldChange } from './sync.js';
+
+const BASE_URL = import.meta.env?.VITE_API_URL || 'http://localhost:5000';
 
 function getToken() {
   return localStorage.getItem('rescom_token');
 }
 
-async function request(path, { method = 'GET', body, auth = true, formData = false } = {}) {
-  const headers = {};
+async function request(path, {
+  method = 'GET', body, auth = true, formData = false, token = getToken(),
+  headers: extraHeaders, timeoutMs = 45000
+} = {}) {
+  const headers = { ...extraHeaders };
   if (!formData) headers['Content-Type'] = 'application/json';
-  if (auth) {
-    const token = getToken();
-    if (token) headers.Authorization = `Bearer ${token}`;
-  }
+  if (auth && token) headers.Authorization = `Bearer ${token}`;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let res;
+  let data = null;
   try {
     res = await fetch(`${BASE_URL}/api${path}`, {
       method, headers, signal: controller.signal,
       body: formData ? body : (body ? JSON.stringify(body) : undefined)
     });
+    try { data = await res.json(); }
+    catch (cause) { if (cause.name !== 'SyntaxError') throw cause; }
   } catch (cause) {
     const mutation = method !== 'GET';
     const message = cause.name === 'AbortError'
       ? 'The server took too long to respond.'
       : 'Could not reach the server. Check your internet connection.';
-    throw new Error(message + (mutation ? ' The save outcome is unknown. Refresh the records before trying again to avoid duplicates.' : ' Please try again.'), { cause });
+    const error = new Error(message + (mutation ? ' The save outcome is unknown. Refresh the records before trying again to avoid duplicates.' : ' Please try again.'), { cause });
+    error.network = true;
+    throw error;
   } finally { clearTimeout(timeout); }
-
-  let data = null;
-  try { data = await res.json(); } catch (e) { /* no body */ }
 
   if (!res.ok) {
     const error = new Error(data?.error || `Request failed (${res.status})`);
     error.status = res.status;
+    error.code = data?.code;
     throw error;
   }
   return data;
@@ -51,16 +57,26 @@ function toFormData(obj) {
   return fd;
 }
 
+const save = (path, options) => saveFieldChange(request, path, options);
+
 export const api = {
-  get: (path) => request(path),
-  post: (path, body, opts) => request(path, { method: 'POST', body, ...opts }),
-  put: (path, body) => request(path, { method: 'PUT', body }),
-  patch: (path, body) => request(path, { method: 'PATCH', body }),
-  del: (path) => request(path, { method: 'DELETE' }),
-  postForm: (path, obj) => request(path, { method: 'POST', body: toFormData(obj), formData: true }),
-  putForm: (path, obj) => request(path, { method: 'PUT', body: toFormData(obj), formData: true }),
+  get: path => readFieldData(request, path),
+  post: (path, body, opts) => save(path, { method: 'POST', body, ...opts }),
+  put: (path, body) => save(path, { method: 'PUT', body }),
+  patch: (path, body) => save(path, { method: 'PATCH', body }),
+  del: async path => {
+    if (path.split('/').some(isLocalId)) throw new Error('Sync this record before deleting it.');
+    if (globalThis.navigator?.onLine === false) throw new Error('Connect to RESCOM to delete records.');
+    return request(path, { method: 'DELETE' });
+  },
+  postForm: (path, obj) => save(path, { method: 'POST', body: toFormData(obj), formData: true }),
+  putForm: (path, obj) => save(path, { method: 'PUT', body: toFormData(obj), formData: true }),
+  openOffline: (user, passphrase, confirmation) => openOffline(request, BASE_URL, user, passphrase, confirmation),
+  syncOffline: () => flushFieldWrites(request),
+  retryOffline: () => retryFieldWrites(request),
   // Downloads a binary response (PDF, etc.) as a Blob, with auth header.
   download: async (path) => {
+    if (globalThis.navigator?.onLine === false) throw new Error('Connect to RESCOM to download reports.');
     const token = getToken();
     const res = await fetch(`${BASE_URL}/api${path}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
@@ -69,5 +85,9 @@ export const api = {
     return res.blob();
   }
 };
+
+export function savedMessage(result, normal) {
+  return result?.queued ? 'Saved on this device. Waiting to sync.' : normal;
+}
 
 export { BASE_URL };

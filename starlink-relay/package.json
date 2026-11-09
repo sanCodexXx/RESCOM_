@@ -1,0 +1,15 @@
+{
+  "name": "rescom-starlink-relay",
+  "private": true,
+  "version": "1.0.0",
+  "engines": { "node": ">=20.6.0" },
+  "scripts": {
+    "probe": "node relay.js --probe",
+    "report": "node --env-file=.env relay.js --once",
+    "start": "node --env-file=.env relay.js"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.14.0",
+    "@grpc/proto-loader": "^0.8.0"
+  }
+}

@@ -42,7 +42,7 @@ export default function Shell({ route, sidebarOpen, onToggleSidebar, onNav, onLo
         <main id="main-content" tabIndex={-1} className="p-4 sm:p-6 flex-1 min-w-0">
           <ConnectionStatus />{children}
         </main>
-        {!modal && !confirm && <div className="quick-actions md:hidden">
+        {!modal && !confirm && route !== 'starlink' && <div className="quick-actions md:hidden">
           {quickOpen && <div id="quick-actions-list" className="quick-actions-list">
             <button onClick={() => { onNav('evacuees', { quickAction: 'register' }); setQuickOpen(false); }}><Users size={17} />Register evacuee</button>
             <button onClick={() => { onNav('incidents', { quickAction: 'incident' }); setQuickOpen(false); }}><AlertTriangle size={17} />Log incident</button>

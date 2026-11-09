@@ -8,7 +8,9 @@ import { PageHeader } from '../components/layout/Shell.jsx';
 import Button from '../components/ui/Button.jsx';
 import Badge, { STATUS_PILL } from '../components/ui/Badge.jsx';
 import { Field, Ctrl, TextArea, TextInput, Select } from '../components/ui/Field.jsx';
-import { api } from '../lib/api.js';
+import { api, savedMessage } from '../lib/api.js';
+import { isLocalId } from '../lib/fieldData.js';
+import { useSyncRefresh } from '../lib/useSyncRefresh.js';
 import { BARANGAYS } from '../lib/barangays.js';
 import { useUi } from '../context/UiContext.jsx';
 import { getSocket } from '../lib/socket.js';
@@ -120,7 +122,10 @@ export default function DromicReports() {
     try {
       const qs = new URLSearchParams({ from, to, ...(brgy ? { brgy } : {}) });
       setOverview(await api.get(`/analytics/overview?${qs}`));
-    } catch (e) { setOverviewError(e.message); toast(e.message, 'bad'); }
+    } catch (e) {
+      setOverviewError(e.code === 'OFFLINE_VIEW' ? 'Connect to RESCOM to load figures for this period.' : e.message);
+      if (e.code !== 'OFFLINE_VIEW') toast(e.message, 'bad');
+    }
     finally { setOverviewLoading(false); }
   }
   // Socket handlers run with whatever filters were current when they were attached, so they call through a ref.
@@ -135,6 +140,8 @@ export default function DromicReports() {
     } catch (e) { setLoadError(e.message); toast(e.message, 'bad'); }
     finally { setListLoading(false); }
   }
+
+  useSyncRefresh(() => { loadReports(); if (isAdmin) loadOverview(); });
 
   useEffect(() => { if (isAdmin) loadOverview(); else setOverviewLoading(false); }, [from, to, brgy, isAdmin]);
 
@@ -187,15 +194,18 @@ export default function DromicReports() {
     const form = { incident_id: open[0].incident_id, field_remarks: '' };
     openModal({
       title: 'Generate DROMIC Report',
-      sub: 'Creates the next numbered report for an incident, with the figures as of right now',
+      sub: 'Creates a numbered report with figures from the server. Offline requests wait for sync.',
       body: <GenerateForm incidents={open} reports={reports} form={form} />,
       footer: <>
         <Button variant="ghost" block onClick={closeModal}>Cancel</Button>
         <Button block onClick={async () => {
           if (!form.incident_id) { toast('Select a disaster incident', 'bad'); return; }
           try {
-            const r = await api.post('/dromic', form); closeModal(); toast(`DROMIC Report #${r.report_no} generated`, 'ok'); loadReports();
-            // Download the PDF of the newly created report snapshot.
+            const r = await api.post('/dromic', form);
+            closeModal();
+            toast(savedMessage(r, `DROMIC Report #${r.report_no} generated`), 'ok');
+            loadReports();
+            if (r?.queued) return;
             const inc = incidents.find(i => String(i.incident_id) === String(form.incident_id));
             await downloadPdf({ ...r, disaster_name: inc?.disaster_name });
           } catch (e) { toast(e.message, 'bad'); }
@@ -205,6 +215,7 @@ export default function DromicReports() {
   }
 
   async function viewSummary(r) {
+    if (isLocalId(r.report_id)) return;
     try {
       const data = await api.get(`/dromic/${r.report_id}/summary`);
       const t = data.totals || {};
@@ -250,7 +261,7 @@ export default function DromicReports() {
           <Button variant="ghost" block onClick={closeModal}>Close</Button>
           {isAdmin && r.reporting_status === 'Draft' && <Button variant="ghost" onClick={() => { closeModal(); setStatus(r, 'Active'); }}>Activate</Button>}
           {isAdmin && r.reporting_status === 'Active' && <Button variant="ghost" onClick={() => { closeModal(); finalize(r); }}>Finalize</Button>}
-          <Button block onClick={() => downloadPdf(r)}><Download size={14} />Download PDF</Button>
+          <Button block disabled={isLocalId(r.report_id)} onClick={() => downloadPdf(r)}><Download size={14} />Download PDF</Button>
         </>
       });
     } catch (e) { toast(e.message, 'bad'); }
@@ -264,7 +275,11 @@ export default function DromicReports() {
   }
 
   async function setStatus(r, status) {
-    try { await api.patch(`/dromic/${r.report_id}/status`, { reporting_status: status }); toast(`Report #${r.report_no} is now ${STATUS_LABEL[status]}`, 'ok'); loadReports(); }
+    try {
+      const result = await api.patch(`/dromic/${r.report_id}/status`, { reporting_status: status });
+      toast(savedMessage(result, `Report #${r.report_no} is now ${STATUS_LABEL[status]}`), 'ok');
+      loadReports();
+    }
     catch (e) { toast(e.message, 'bad'); }
   }
   function finalize(r) {
@@ -371,14 +386,14 @@ export default function DromicReports() {
           <tbody>
             {pager.items.map(r => (
               <tr key={r.report_id} className="border-b border-navy-900/8 cursor-pointer hover:bg-navy-900/4" onClick={() => viewSummary(r)}>
-                <td className="px-4 py-3 text-[0.78125rem] text-navy-900"><b>#{r.report_no ?? r.report_id}</b></td>
+                <td className="px-4 py-3 text-[0.78125rem] text-navy-900"><b>{isLocalId(r.report_id) ? 'Pending sync' : `#${r.report_no ?? r.report_id}`}</b></td>
                 <td className="px-4 py-3 text-[0.78125rem] text-navy-900"><b>{r.disaster_name || '—'}</b></td>
                 <td className="px-4 py-3 text-[0.75rem] text-navy-900/55">{fmtAsOf(r.as_of || r.report_date)}</td>
                 <td className="px-4 py-3"><Badge className={STATUS_PILL[r.reporting_status]}>{STATUS_LABEL[r.reporting_status]}</Badge></td>
                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                   <div className="flex gap-1.5 items-center">
-                    <Button size="sm" variant="ghost" onClick={() => viewSummary(r)}>View report</Button>
-                    <Button size="sm" onClick={() => downloadPdf(r)}><Download size={13} />PDF</Button>
+                    <Button size="sm" variant="ghost" disabled={isLocalId(r.report_id)} onClick={() => viewSummary(r)}>View report</Button>
+                    <Button size="sm" disabled={isLocalId(r.report_id)} onClick={() => downloadPdf(r)}><Download size={13} />PDF</Button>
                   </div>
                 </td>
               </tr>
@@ -388,10 +403,10 @@ export default function DromicReports() {
       </div>
       {!listLoading && <div className="md:hidden space-y-3">
         {pager.items.map(report => <article key={report.report_id} className="glass rounded-glass p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2"><span className="text-xs text-slate-500">Report #{report.report_no ?? report.report_id}</span><Badge className={STATUS_PILL[report.reporting_status]}>{STATUS_LABEL[report.reporting_status]}</Badge></div>
+          <div className="flex items-center justify-between gap-2"><span className="text-xs text-slate-500">{isLocalId(report.report_id) ? 'Pending sync' : `Report #${report.report_no ?? report.report_id}`}</span><Badge className={STATUS_PILL[report.reporting_status]}>{STATUS_LABEL[report.reporting_status]}</Badge></div>
           <h3 className="font-semibold text-sm break-words">{report.disaster_name || 'Incident report'}</h3>
           <p className="text-xs text-slate-500">As of {fmtAsOf(report.as_of || report.report_date)}</p>
-          <div className="flex gap-2"><Button size="sm" variant="ghost" className="flex-1" onClick={() => viewSummary(report)}>View report</Button><Button size="sm" className="flex-1" onClick={() => downloadPdf(report)}><Download size={14} />PDF</Button></div>
+          <div className="flex gap-2"><Button size="sm" variant="ghost" className="flex-1" disabled={isLocalId(report.report_id)} onClick={() => viewSummary(report)}>View report</Button><Button size="sm" className="flex-1" disabled={isLocalId(report.report_id)} onClick={() => downloadPdf(report)}><Download size={14} />PDF</Button></div>
         </article>)}
       </div>}
       {!listLoading && !loadError && !reports.length && <SharedEmptyState title="No DROMIC reports yet" message="Use Generate Report above to prepare a report for the selected period or incident." />}

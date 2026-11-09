@@ -4,6 +4,7 @@ const db = require('../db');
 const { compileFigures } = require('../utils/figures');
 const { verifyToken, requireRole } = require('../middleware/auth');
 const { emit } = require('../utils/notify');
+const { fieldWrite, writeError } = require('../utils/fieldWrite');
 
 const router = express.Router();
 router.use(verifyToken);
@@ -32,34 +33,34 @@ router.get('/', async (req, res) => {
 // "Cum" = everyone ever registered under the incident, "Now" = still Present.
 // POST /api/dromic - makes the next numbered report for an incident,
 // freezing the figures as of right now.
-router.post('/', async (req, res) => {
-  try {
-    const { incident_id, field_remarks } = req.body;
-    if (!incident_id) return res.status(400).json({ error: 'incident_id is required' });
+router.post('/', fieldWrite(201, async (req, client) => {
+  const { incident_id, field_remarks } = req.body;
+  if (!incident_id) throw writeError(400, 'Select a disaster incident.');
+  const { rows: [incident] } = await client.query(
+    'SELECT incident_id, reporting_status, date_ended FROM DISASTER_INCIDENTS WHERE incident_id = $1 FOR UPDATE',
+    [incident_id]
+  );
+  if (!incident) throw writeError(404, 'Incident not found');
 
-    const { rows: [inc] } = await db.query('SELECT incident_id, reporting_status, date_ended FROM DISASTER_INCIDENTS WHERE incident_id = $1', [incident_id]);
-    if (!inc) return res.status(404).json({ error: 'Incident not found' });
+  const { rows: [finalReport] } = await client.query(
+    "SELECT report_no FROM DROMIC_REPORTS WHERE incident_id = $1 AND reporting_status = 'Finalized' LIMIT 1", [incident_id]
+  );
+  if (finalReport) throw writeError(400, `A final report (#${finalReport.report_no}) was already issued for this incident.`);
 
-    const { rows: [fin] } = await db.query(
-      `SELECT report_no FROM DROMIC_REPORTS WHERE incident_id = $1 AND reporting_status = 'Finalized' LIMIT 1`, [incident_id]);
-    if (fin) return res.status(400).json({ error: `A final report (#${fin.report_no}) was already issued for this incident, so no new reports can be added.` });
-
-    const figures = { ...(await compileFigures(incident_id)), incident_status: inc.reporting_status, incident_date_ended: inc.date_ended };
-    const { rows: [report] } = await db.query(
-      `INSERT INTO DROMIC_REPORTS (incident_id, generated_by, reporting_status, field_remarks, report_no, as_of, snapshot)
-       VALUES ($1, $2, 'Active',  $3,
-               (SELECT COALESCE(MAX(report_no), 0) + 1 FROM DROMIC_REPORTS WHERE incident_id = $1),
-               NOW(), $4)
-       RETURNING report_id, incident_id, generated_by, report_date, reporting_status, field_remarks, report_no, as_of`,
-      [incident_id, req.user.user_id, field_remarks ? String(field_remarks).trim() : null, JSON.stringify(figures)]
-    );
-    emit('dromic_report_generated', report);
-    res.status(201).json(report);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Could not generate the report' });
-  }
-});
+  const figures = {
+    ...(await compileFigures(incident_id, client.query.bind(client))),
+    incident_status: incident.reporting_status,
+    incident_date_ended: incident.date_ended
+  };
+  const { rows: [report] } = await client.query(
+    `INSERT INTO DROMIC_REPORTS (incident_id, generated_by, reporting_status, field_remarks, report_no, as_of, snapshot)
+     VALUES ($1,$2,'Active',$3,
+       (SELECT COALESCE(MAX(report_no), 0) + 1 FROM DROMIC_REPORTS WHERE incident_id = $1), NOW(),$4)
+     RETURNING report_id, incident_id, generated_by, report_date, reporting_status, field_remarks, report_no, as_of`,
+    [incident_id, req.user.user_id, field_remarks ? String(field_remarks).trim() : null, JSON.stringify(figures)]
+  );
+  return report;
+}, (req, report) => emit('dromic_report_generated', report)));
 
 async function compileSummary(reportId) {
   const { rows: [report] } = await db.query(`
@@ -105,19 +106,19 @@ router.get('/:id/pdf', async (req, res) => {
 //   Draft      -> still being prepared
 //   Active     -> issued, the incident is still going (shown as "On-Going")
 //   Finalized  -> the final report, locked (shown as "Final")
-router.patch('/:id/status', requireRole('ADMIN_STAFF'), async (req, res) => {
+router.patch('/:id/status', requireRole('ADMIN_STAFF'), fieldWrite(200, async (req, client) => {
   const { reporting_status } = req.body;
-  if (!STATUSES.includes(reporting_status)) return res.status(400).json({ error: `Status must be one of: ${STATUSES.join(', ')}` });
-  const { rows: [cur] } = await db.query('SELECT reporting_status FROM DROMIC_REPORTS WHERE report_id = $1', [req.params.id]);
-  if (!cur) return res.status(404).json({ error: 'Report not found' });
-  if (cur.reporting_status === 'Finalized') return res.status(400).json({ error: 'A final report is locked and cannot be changed.' });
-  const { rows } = await db.query(
+  if (!STATUSES.includes(reporting_status)) throw writeError(400, `Status must be one of: ${STATUSES.join(', ')}`);
+  const { rows: [cur] } = await client.query('SELECT incident_id, reporting_status FROM DROMIC_REPORTS WHERE report_id = $1 FOR UPDATE', [req.params.id]);
+  if (!cur) throw writeError(404, 'Report not found');
+  if (cur.reporting_status === 'Finalized') throw writeError(400, 'A final report is locked and cannot be changed.');
+  if (cur.incident_id) await client.query('SELECT incident_id FROM DISASTER_INCIDENTS WHERE incident_id = $1 FOR UPDATE', [cur.incident_id]);
+  const { rows } = await client.query(
     `UPDATE DROMIC_REPORTS SET reporting_status = $1 WHERE report_id = $2
      RETURNING report_id, incident_id, generated_by, report_date, reporting_status, field_remarks, report_no, as_of`,
     [reporting_status, req.params.id]
   );
-  emit('dromic_report_generated', rows[0]);
-  res.json(rows[0]);
-});
+  return rows[0];
+}, (req, report) => emit('dromic_report_generated', report)));
 
 module.exports = router;

@@ -1,4 +1,12 @@
-## Current update: simpler role views and centered feedback
+# Current update: Starlink and offline saves
+
+See [OFFLINE_SETUP.md](OFFLINE_SETUP.md) for the database migrations, browser setup, and outage test. See [STARLINK_SETUP.md](STARLINK_SETUP.md) for the optional dish setup.
+
+The patch updates the saved auth-layout version. If your local copy already has the previous Starlink update, merge the latest ZIP source into that copy and remove the retired `frontend/src/pages/OfflineRegistration.jsx` file. Keep your project’s environment settings.
+
+---
+
+## Earlier update: simpler role views and centered feedback
 
 This ZIP includes the PDF-only reporting change and the latest UI cleanup. Use this version instead of the earlier ZIP.
 

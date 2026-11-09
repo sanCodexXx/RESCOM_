@@ -4,6 +4,8 @@ import { ModalHost } from './components/ui/Modal.jsx';
 import { Toasts } from './components/ui/Toasts.jsx';
 import { Skeleton } from './components/ui/DataStates.jsx';
 import Shell from './components/layout/Shell.jsx';
+import { useOfflineAccess } from './components/ui/OfflineAccess.jsx';
+import { isPrepared } from './lib/sync.js';
 
 import Login from './pages/auth/Login.jsx';
 import Register from './pages/auth/Register.jsx';
@@ -16,9 +18,11 @@ const Incidents = lazy(() => import('./pages/Incidents.jsx'));
 const DromicReports = lazy(() => import('./pages/DromicReports.jsx'));
 const Users = lazy(() => import('./pages/Users.jsx'));
 const Settings = lazy(() => import('./pages/Settings.jsx'));
+const Starlink = lazy(() => import('./pages/Starlink.jsx'));
 
 const PAGES = {
   dashboard: Dashboard,
+  starlink: Starlink,
   centers: Centers,
   evacuees: Evacuees,
   priority: PriorityCases,
@@ -39,6 +43,7 @@ export default function App() {
   const [authView, setAuthView] = useState('login');
   const [route, setRoute] = useState('dashboard');
   const [ctx, setCtx] = useState({});
+  const openOffline = useOfflineAccess();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
 
   // Open the sidebar when the window grows to desktop width, close it when it shrinks to mobile.
@@ -55,10 +60,10 @@ export default function App() {
   }, [user?.user_id]);
 
   const nav = useCallback((r, c = {}) => {
+    window.scrollTo(0, 0);
     setRoute(r);
     setCtx(c);
     if (window.innerWidth < 768) setSidebarOpen(false);
-    window.scrollTo(0, 0);
   }, []);
 
   const Page = PAGES[route] || Dashboard;
@@ -67,9 +72,12 @@ export default function App() {
   return (
     <>
       {!user ? (
-        <Suspense fallback={null}><AuthPage goto={setAuthView} /></Suspense>
+        <Suspense fallback={null}>
+          <AuthPage goto={setAuthView} openOffline={isPrepared() ? openOffline : undefined} />
+        </Suspense>
       ) : (
         <Shell
+          key={user.user_id}
           route={route}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((v) => !v)}

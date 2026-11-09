@@ -1,9 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-const source = (await readFile(new URL('../src/lib/api.js', import.meta.url), 'utf8')).replace('import.meta.env.VITE_API_URL', 'undefined');
+import { api } from '../src/lib/api.js';
 globalThis.localStorage = { getItem: () => 'test-token' };
-const { api } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 test('GET includes bearer token and parses server JSON', async () => {
   globalThis.fetch = async (url, options) => {
     assert.equal(url, 'http://localhost:5000/api/centers');

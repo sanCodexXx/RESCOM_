@@ -8,7 +8,8 @@ import Button from '../components/ui/Button.jsx';
 import Badge, { STATUS_PILL } from '../components/ui/Badge.jsx';
 import { ProgressBar } from '../components/ui/StatCard.jsx';
 import { Field, Ctrl, TextInput, Select } from '../components/ui/Field.jsx';
-import { api } from '../lib/api.js';
+import { api, savedMessage } from '../lib/api.js';
+import { useSyncRefresh } from '../lib/useSyncRefresh.js';
 import { useUi } from '../context/UiContext.jsx';
 import { getSocket } from '../lib/socket.js';
 import { peekSeed, clearSeed } from '../lib/searchSeed.js';
@@ -48,6 +49,8 @@ export default function Centers() {
     finally { setLoading(false); }
   }
 
+  useSyncRefresh(load);
+
   useEffect(() => {
     load();
     const s = getSocket();
@@ -74,11 +77,13 @@ export default function Centers() {
           try {
             const payload = { ...form };
             if (imageFile) payload.image = imageFile;
-            if (existing) await api.putForm(`/centers/${existing.center_id}`, payload);
-            else await api.postForm('/centers', payload);
+            const result = existing
+              ? await api.putForm(`/centers/${existing.center_id}`, payload)
+              : await api.postForm('/centers', payload);
             closeModal();
             load();
-            openSuccess({ title: existing ? 'Center Updated' : 'Center Added', message: form.center_name });
+            if (result?.queued) toast(savedMessage(result), 'ok');
+            else openSuccess({ title: existing ? 'Center Updated' : 'Center Added', message: form.center_name });
           } catch (e) { toast(e.message, 'bad'); }
         }}>{existing ? 'Save Changes' : 'Add Center'}</Button>
       </>
@@ -172,6 +177,7 @@ export default function Centers() {
               </div>
               <div className="p-5">
                 <b className="text-[0.875rem] text-navy-900 leading-snug block">{c.center_name}</b>
+                {c.pending_sync && <span className="pending-sync-badge">Pending sync</span>}
                 <div className="text-[0.6875rem] text-navy-900/45 my-2 flex items-center gap-1"><MapPin size={11} />{c.barangay}</div>
                 <div className="flex justify-between text-[0.75rem] mb-1.5 text-navy-900/65"><span>Occupancy</span><b className="text-navy-900">{c.occupancy} / {c.capacity}</b></div>
                 <ProgressBar pct={pct} color={occColor(pct)} />

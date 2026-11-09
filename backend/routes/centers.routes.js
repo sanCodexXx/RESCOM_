@@ -3,6 +3,7 @@ const multer = require('multer');
 const db = require('../db');
 const { verifyToken, requireRole } = require('../middleware/auth');
 const { emit, notify } = require('../utils/notify');
+const { fieldWrite, writeError } = require('../utils/fieldWrite');
 
 const router = express.Router();
 const CENTER_STATUSES = ['Open', 'Full', 'Standby', 'Closed'];
@@ -29,15 +30,15 @@ function uploadImage(req, res, next) {
   });
 }
 
-async function saveImage(req, id) {
+async function saveImage(req, id, client) {
   if (!req.file) return;
   const url = `${req.protocol}://${req.get('host')}/api/centers/${id}/image?v=${Date.now()}`;
-  await db.query(
+  await client.query(
     `INSERT INTO CENTER_IMAGES (center_id, image_data, image_type) VALUES ($1,$2,$3)
      ON CONFLICT (center_id) DO UPDATE SET image_data = EXCLUDED.image_data, image_type = EXCLUDED.image_type`,
     [id, req.file.buffer, req.file.mimetype]
   );
-  await db.query('UPDATE EVACUATION_CENTERS SET image_url = $1 WHERE center_id = $2', [url, id]);
+  await client.query('UPDATE EVACUATION_CENTERS SET image_url = $1 WHERE center_id = $2', [url, id]);
 }
 
 // Public on purpose: <img> tags can't send the Authorization header.
@@ -62,42 +63,43 @@ router.get('/:id', async (req, res) => {
   res.json(rows[0]);
 });
 
-router.post('/', requireRole('ADMIN_STAFF'), uploadImage, async (req, res) => {
+router.post('/', requireRole('ADMIN_STAFF'), uploadImage, fieldWrite(201, async (req, client) => {
   const { center_name, barangay, address, capacity, status } = req.body;
-  if (!center_name || !barangay) return res.status(400).json({ error: 'Center name and barangay are required' });
-  if (status && !CENTER_STATUSES.includes(status)) return res.status(400).json({ error: `Status must be one of: ${CENTER_STATUSES.join(', ')}` });
+  if (!center_name || !barangay) throw writeError(400, 'Center name and barangay are required');
+  if (status && !CENTER_STATUSES.includes(status)) throw writeError(400, `Status must be one of: ${CENTER_STATUSES.join(', ')}`);
   if (capacity !== undefined && capacity !== '' && (!Number.isInteger(Number(capacity)) || Number(capacity) < 0)) {
-    return res.status(400).json({ error: 'Capacity must be a whole number, 0 or more' });
+    throw writeError(400, 'Capacity must be a whole number, 0 or more');
   }
 
-  const { rows: [created] } = await db.query(
+  const { rows: [created] } = await client.query(
     `INSERT INTO EVACUATION_CENTERS (center_name, barangay, address, capacity, occupancy, status, image_url)
      VALUES ($1,$2,$3,$4,0,$5,$6) RETURNING *`,
     [center_name, barangay, address || null, parseInt(capacity, 10) || 0, status || 'Open', req.body.image_url || null]
   );
-  await saveImage(req, created.center_id);
-  const { rows: [center] } = await db.query('SELECT * FROM EVACUATION_CENTERS WHERE center_id = $1', [created.center_id]);
+  await saveImage(req, created.center_id, client);
+  const { rows: [center] } = await client.query('SELECT * FROM EVACUATION_CENTERS WHERE center_id = $1', [created.center_id]);
+  return center;
+}, (req, center) => {
   emit('center_updated', center);
   notify('New Shelter Added', `${center.center_name} is now available.`, { type: 'success' });
-  res.status(201).json(center);
-});
+}));
 
-router.put('/:id', requireRole('ADMIN_STAFF'), uploadImage, async (req, res) => {
+router.put('/:id', requireRole('ADMIN_STAFF'), uploadImage, fieldWrite(200, async (req, client) => {
   const id = parseInt(req.params.id, 10);
-  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid center id' });
+  if (!Number.isInteger(id)) throw writeError(400, 'Invalid center id');
   const { center_name, barangay, address, capacity, status } = req.body;
-  if (status && !CENTER_STATUSES.includes(status)) return res.status(400).json({ error: `Status must be one of: ${CENTER_STATUSES.join(', ')}` });
+  if (status && !CENTER_STATUSES.includes(status)) throw writeError(400, `Status must be one of: ${CENTER_STATUSES.join(', ')}`);
 
-  const { rows: [current] } = await db.query('SELECT capacity, occupancy, status FROM EVACUATION_CENTERS WHERE center_id = $1', [id]);
-  if (!current) return res.status(404).json({ error: 'Center not found' });
+  const { rows: [current] } = await client.query('SELECT capacity, occupancy, status FROM EVACUATION_CENTERS WHERE center_id = $1 FOR UPDATE', [id]);
+  if (!current) throw writeError(404, 'Center not found');
 
   // 0 is a valid capacity, so test "was it sent" rather than "is it truthy".
   let newCapacity = current.capacity;
   if (capacity !== undefined && capacity !== '') {
     newCapacity = Number(capacity);
-    if (!Number.isInteger(newCapacity) || newCapacity < 0) return res.status(400).json({ error: 'Capacity must be a whole number, 0 or more' });
+    if (!Number.isInteger(newCapacity) || newCapacity < 0) throw writeError(400, 'Capacity must be a whole number, 0 or more');
     if (newCapacity < current.occupancy) {
-      return res.status(400).json({ error: `Capacity cannot be lower than the ${current.occupancy} people currently inside` });
+      throw writeError(400, `Capacity cannot be lower than the ${current.occupancy} people currently inside`);
     }
   }
   // Keep the status in step with the headcount, unless an admin picked one on purpose.
@@ -105,7 +107,7 @@ router.put('/:id', requireRole('ADMIN_STAFF'), uploadImage, async (req, res) => 
   if (newStatus === 'Open' && newCapacity > 0 && current.occupancy >= newCapacity) newStatus = 'Full';
   else if (!status && current.status === 'Full' && current.occupancy < newCapacity) newStatus = 'Open';
 
-  const { rows } = await db.query(
+  await client.query(
     `UPDATE EVACUATION_CENTERS SET
        center_name = COALESCE($1, center_name),
        barangay    = COALESCE($2, barangay),
@@ -113,15 +115,13 @@ router.put('/:id', requireRole('ADMIN_STAFF'), uploadImage, async (req, res) => 
        capacity    = COALESCE($4, capacity),
        status      = COALESCE($5, status),
        image_url   = COALESCE($6, image_url)
-     WHERE center_id = $7 RETURNING *`,
+     WHERE center_id = $7`,
     [center_name, barangay, address, newCapacity, newStatus, req.body.image_url || null, id]
   );
-  if (!rows[0]) return res.status(404).json({ error: 'Center not found' });
-  await saveImage(req, id);
-  const { rows: [center] } = await db.query('SELECT * FROM EVACUATION_CENTERS WHERE center_id = $1', [id]);
-  emit('center_updated', center);
-  res.json(center);
-});
+  await saveImage(req, id, client);
+  const { rows: [center] } = await client.query('SELECT * FROM EVACUATION_CENTERS WHERE center_id = $1', [id]);
+  return center;
+}, (req, center) => emit('center_updated', center)));
 
 router.delete('/:id', requireRole('ADMIN_STAFF'), async (req, res) => {
   const id = parseInt(req.params.id, 10);

@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+// Wire fields used by the read-only Starlink Local Device API probe.
+package SpaceX.API.Device;
+
+service Device {
+  rpc Handle (DiagnosticsRequest) returns (DiagnosticsResponse);
+}
+
+message DiagnosticsRequest {
+  Empty get_diagnostics = 6000;
+}
+
+message Empty {}
+
+message DiagnosticsResponse {
+  Dish dish_get_diagnostics = 6001;
+}
+
+message Dish {
+  string id = 1;
+  Alerts alerts = 5;
+}
+
+message Alerts {
+  bool thermal_throttle = 2;
+  bool thermal_shutdown = 3;
+  bool slow_ethernet = 7;
+  bool obstructed = 10;
+}

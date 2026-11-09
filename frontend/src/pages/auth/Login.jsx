@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, WifiOff } from 'lucide-react';
 import AuthLayout, { AuthField, PasswordField } from './AuthLayout.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useUi } from '../../context/UiContext.jsx';
 
-export default function Login({ goto }) {
+export default function Login({ goto, openOffline }) {
   const { login } = useAuth();
   const { toast } = useUi();
   const saved = localStorage.getItem('rescom_remember') || '';
@@ -31,7 +31,6 @@ export default function Login({ goto }) {
 
   return (
     <AuthLayout>
-      <p className="auth-eyebrow">STAFF WORKSPACE</p>
       <h1>Welcome back.</h1>
       <p className="auth-subtitle">Sign in to continue to RESCOM.</p>
       <form className="auth-form" onSubmit={submit}>
@@ -45,6 +44,13 @@ export default function Login({ goto }) {
         <button type="submit" className="auth-primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'} <ArrowRight size={17} /></button>
       </form>
       <p className="auth-switch">New to RESCOM? <button type="button" className="auth-link" onClick={() => goto('register')}>Create an account</button></p>
+      {openOffline && (
+        <p className="auth-switch">
+          <button type="button" className="auth-link inline-flex items-center gap-2" onClick={openOffline}>
+            <WifiOff size={16} aria-hidden="true" /> Open RESCOM offline
+          </button>
+        </p>
+      )}
     </AuthLayout>
   );
 }

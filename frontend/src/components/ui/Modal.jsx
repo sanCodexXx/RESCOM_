@@ -40,6 +40,6 @@ export function ModalHost() {
           catch (e) { toast(e.message || 'The action could not be completed.', 'bad'); }
           finally { setBusy(false); }
         }}>{busy ? 'Working…' : confirm.confirmLabel || 'Confirm'}</Button></div>
-    </> : <><div className="dialog-body">{modal.body}</div><div className="dialog-footer">{modal.footer}</div></>}
+    </> : <><div className="dialog-body">{modal.body}</div>{modal.footer && <div className="dialog-footer">{modal.footer}</div>}</>}
   </dialog>;
 }

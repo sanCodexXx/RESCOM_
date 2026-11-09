@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Menu, Bell, MoreVertical, Check, CheckCheck, Trash2, Eye, X, Search, ChevronDown, Settings as SettingsIcon, LogOut, Users, Building2, AlertTriangle, CornerDownLeft } from 'lucide-react';
+import { Menu, Bell, MoreVertical, Check, CheckCheck, Trash2, Eye, X, Search, SatelliteDish, ChevronDown, Settings as SettingsIcon, LogOut, Users, Building2, AlertTriangle, CornerDownLeft } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { api } from '../../lib/api.js';
 import { getSocket } from '../../lib/socket.js';
@@ -137,9 +137,17 @@ export default function Topbar({ sidebarOpen, route, onToggleSidebar, onNav, onL
   return (
     <header className="h-[62px] glass border-x-0 border-t-0 flex items-center px-3 sm:px-5 gap-2 sm:gap-3.5 sticky top-0 z-20" ref={ref}>
       <button aria-label="Toggle navigation" aria-expanded={sidebarOpen} aria-controls="main-navigation" onClick={onToggleSidebar} className="text-navy-900/60 hover:bg-navy-900/8 rounded-lg p-2"><Menu size={18} /></button>
-      <span className="flex-1 min-w-0 truncate text-sm font-semibold text-navy-900">{NAV.find(n => n.key === route)?.label || 'RESCOM'}</span>
+      <span className="flex-1 min-w-0 truncate text-sm font-semibold text-navy-900">{route === 'starlink' ? 'Starlink' : NAV.find(n => n.key === route)?.label || 'RESCOM'}</span>
 
-      <button onClick={openSearchBar} aria-label="Search" title="Search" className="text-navy-900/60 hover:bg-navy-900/8 rounded-lg p-2"><Search size={18} /></button>
+      <button type="button" onClick={openSearchBar} aria-label="Search" title="Search"
+        className="flex shrink-0 items-center gap-2 rounded-lg p-2 text-navy-900/60 hover:bg-navy-900/8 sm:w-48 sm:border sm:border-navy-900/10 sm:px-3">
+        <Search size={18} aria-hidden="true" /><span className="hidden text-xs sm:inline">Search records</span>
+      </button>
+      <button type="button" className="starlink-trigger" aria-label="Starlink" title="Starlink connectivity"
+        aria-current={route === 'starlink' ? 'page' : undefined}
+        onClick={() => { setOpenNotif(false); setOpenMenu(false); onNav('starlink'); }}>
+        <SatelliteDish size={20} aria-hidden="true" />
+      </button>
 
       <div className="relative">
         <button onClick={() => { setOpenMenu(false); setOpenNotif(v => !v); }} aria-label="Notifications" className="relative text-navy-900/60 hover:bg-navy-900/8 rounded-lg p-2">

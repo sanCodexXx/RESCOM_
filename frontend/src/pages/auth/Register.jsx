@@ -69,7 +69,6 @@ export default function Register({ goto }) {
         <p className="auth-subtitle">An MDRRMO administrator will review your request for {roles.find(role => role.value === form.role)?.label} access.</p>
         <button type="button" className="auth-primary" onClick={() => goto('login')}>Back to sign in <ArrowRight size={17} /></button>
       </> : <>
-        <p className="auth-eyebrow">ACCOUNT REQUEST</p>
         <h1>Create an account.</h1>
         <p className="auth-subtitle">Enter your details and request your RESCOM role.</p>
         <form className="auth-form auth-register-form" onSubmit={submit}>

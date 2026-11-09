@@ -21,7 +21,8 @@ import {
 import { PageHeader } from '../components/layout/Shell.jsx';
 import Badge, { STATUS_PILL } from '../components/ui/Badge.jsx';
 import Button from '../components/ui/Button.jsx';
-import { api } from '../lib/api.js';
+import { api, savedMessage } from '../lib/api.js';
+import { useSyncRefresh } from '../lib/useSyncRefresh.js';
 import { useUi } from '../context/UiContext.jsx';
 import { getSocket } from '../lib/socket.js';
 
@@ -118,6 +119,8 @@ export default function PriorityCases() {
     }
   }
 
+  useSyncRefresh(() => load(false));
+
   useEffect(() => {
     load();
 
@@ -203,12 +206,12 @@ export default function PriorityCases() {
 
   async function setStatus(priorityCase, status) {
     try {
-      await api.patch(
+      const result = await api.patch(
         `/priority-cases/${priorityCase.priority_id}/status`,
         { priority_status: status }
       );
 
-      toast('Priority case status updated successfully.', 'ok');
+      toast(savedMessage(result, 'Priority case status updated successfully.'), 'ok');
       await load(false);
     } catch (error) {
       toast(error.message || 'Unable to update priority case status.', 'bad');
@@ -473,6 +476,7 @@ export default function PriorityCases() {
                             <div>
                               <p className="text-sm font-semibold text-slate-800">
                                 {item.first_name} {item.last_name}
+                                {item.pending_sync && <span className="pending-sync-badge">Pending sync</span>}
                               </p>
 
                               <p className="mt-1 text-xs text-slate-500">
@@ -563,6 +567,7 @@ export default function PriorityCases() {
                         <div className="min-w-0">
                           <h3 className="truncate text-sm font-semibold text-slate-900">
                             {item.first_name} {item.last_name}
+                                {item.pending_sync && <span className="pending-sync-badge">Pending sync</span>}
                           </h3>
 
                           <p className="mt-1 truncate text-xs text-slate-500">

@@ -4,7 +4,7 @@
 //   compileFigures({ from, to, brgy })         -> a date range, optionally one barangay of origin
 const db = require('../db');
 
-async function compileFigures(scope) {
+async function compileFigures(scope, query = db.query) {
   const s = scope !== null && typeof scope === 'object' ? scope : { incidentId: scope };
   const isIncident = s.incidentId != null;
   const params = isIncident ? [s.incidentId] : [s.from, s.to];
@@ -14,7 +14,7 @@ async function compileFigures(scope) {
   params.push(s.brgy || null);
   const brgyParam = `$${params.length}`;
 
-  const { rows } = await db.query(`
+  const { rows } = await query(`
     WITH latest AS (
       SELECT DISTINCT ON (er.evacuee_id) er.evacuee_id, er.center_id, er.status
       FROM EVACUATION_RECORDS er
@@ -33,7 +33,7 @@ async function compileFigures(scope) {
 
   const ids = rows.map(r => r.evacuee_id);
   const pri = ids.length
-    ? (await db.query('SELECT DISTINCT evacuee_id, case_type FROM PRIORITY_CASES WHERE evacuee_id = ANY($1)', [ids])).rows
+    ? (await query('SELECT DISTINCT evacuee_id, case_type FROM PRIORITY_CASES WHERE evacuee_id = ANY($1)', [ids])).rows
     : [];
 
   const famKey = r => (r.family_id != null ? `f${r.family_id}` : `e${r.evacuee_id}`);

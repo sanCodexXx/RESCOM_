@@ -20,6 +20,7 @@ const incidentsRoutes = require('./routes/incidents.routes');
 const dromicRoutes = require('./routes/dromic.routes');
 const analyticsRoutes = require('./routes/analytics.routes');
 const notificationsRoutes = require('./routes/notifications.routes');
+const starlinkRoutes = require('./routes/starlink.routes');
 
 // Production JWT security check
 if (
@@ -72,7 +73,7 @@ app.use(
 app.use(cors({
   origin: corsOrigin,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-RESCOM-Owner', 'X-RESCOM-Captured-At']
 }));
 
 // JSON body parser
@@ -128,6 +129,7 @@ app.use('/api/incidents', incidentsRoutes);
 app.use('/api/dromic', dromicRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/starlink', starlinkRoutes);
 
 // 404 handler
 app.use((req, res) => {

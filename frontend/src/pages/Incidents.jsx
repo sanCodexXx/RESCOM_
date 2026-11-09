@@ -7,7 +7,8 @@ import { PageHeader } from '../components/layout/Shell.jsx';
 import Button from '../components/ui/Button.jsx';
 import Badge, { STATUS_PILL, SEV_PILL } from '../components/ui/Badge.jsx';
 import { Field, Ctrl, TextInput, TextArea, Select } from '../components/ui/Field.jsx';
-import { api } from '../lib/api.js';
+import { api, savedMessage } from '../lib/api.js';
+import { useSyncRefresh } from '../lib/useSyncRefresh.js';
 import { useUi } from '../context/UiContext.jsx';
 import { getSocket } from '../lib/socket.js';
 
@@ -33,6 +34,8 @@ export default function Incidents({ ctx }) {
     finally { setLoading(false); }
   }
 
+  useSyncRefresh(load);
+
   useEffect(() => {
     load();
     const s = getSocket();
@@ -51,7 +54,12 @@ export default function Incidents({ ctx }) {
         <Button variant="ghost" block onClick={closeModal}>Cancel</Button>
         <Button block onClick={async () => {
           if (!form.disaster_name || !form.disaster_type) { toast('Disaster name and type are required', 'bad'); return; }
-          try { await api.post('/incidents', form); closeModal(); toast('Incident logged', 'ok'); load(); }
+          try {
+            const result = await api.post('/incidents', form);
+            closeModal();
+            toast(savedMessage(result, 'Incident logged'), 'ok');
+            load();
+          }
           catch (e) { toast(e.message, 'bad'); }
         }}><Plus size={14} />Log Incident</Button>
       </>
@@ -64,7 +72,11 @@ export default function Incidents({ ctx }) {
     openConfirm({ title: 'Update incident status?',
       msg: `<b>${i.disaster_name}</b> will change from ${i.reporting_status} to ${next}.`,
       confirmLabel: `Mark ${next}`, variant: 'primary',
-      onConfirm: async () => { await api.patch(`/incidents/${i.incident_id}/status`, { reporting_status: next }); toast(`Incident marked ${next}`, 'ok'); load(); }
+      onConfirm: async () => {
+        const result = await api.patch(`/incidents/${i.incident_id}/status`, { reporting_status: next });
+        toast(savedMessage(result, `Incident marked ${next}`), 'ok');
+        load();
+      }
     });
   }
 
@@ -97,7 +109,7 @@ export default function Incidents({ ctx }) {
           <tbody>
             {pager.items.map(i => (
               <tr key={i.incident_id} className="border-b border-navy-900/8">
-                <td className="px-4 py-3 text-[0.78125rem] text-navy-900"><b>{i.disaster_name}</b></td>
+                <td className="px-4 py-3 text-[0.78125rem] text-navy-900"><b>{i.disaster_name}</b>{i.pending_sync && <span className="pending-sync-badge">Pending sync</span>}</td>
                 <td className="px-4 py-3 text-[0.78125rem] text-navy-900/65">{i.disaster_type}</td>
                 <td className="px-4 py-3 text-[0.78125rem] text-navy-900/65">{i.brgy || '—'}</td>
                 <td className="px-4 py-3"><Badge className={SEV_PILL[i.severity]}>{i.severity}</Badge></td>

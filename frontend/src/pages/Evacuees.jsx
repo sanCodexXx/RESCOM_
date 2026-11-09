@@ -34,7 +34,10 @@ import {
   RadioGroup,
 } from '../components/ui/Field.jsx';
 
-import { api } from '../lib/api.js';
+import { api, savedMessage } from '../lib/api.js';
+import { isLocalId } from '../lib/fieldData.js';
+import { useSyncRefresh } from '../lib/useSyncRefresh.js';
+import { registrationPayload } from '../lib/registration.js';
 import { useUi } from '../context/UiContext.jsx';
 import { getSocket } from '../lib/socket.js';
 
@@ -70,7 +73,7 @@ const STATUS_OPTIONS = [
   'Checked out',
 ];
 
-const INITIAL_FORM = {
+export const INITIAL_FORM = {
   family_id: '',
   family_name: '',
   barangay: '',
@@ -111,7 +114,7 @@ function getStatusClass(status) {
 }
 
 
-function validateEvacuee(form, { full = true } = {}) {
+export function validateEvacuee(form, { full = true } = {}) {
   const errors = {};
 
   if (!form.first_name.trim()) {
@@ -163,6 +166,8 @@ function validateEvacuee(form, { full = true } = {}) {
 
   return errors;
 }
+
+
 
 
 /* =====================================================
@@ -419,6 +424,8 @@ export default function Evacuees({ ctx }) {
   }
 
 
+  useSyncRefresh(load);
+
   useEffect(() => {
     clearSeed();
 
@@ -516,11 +523,12 @@ export default function Evacuees({ ctx }) {
 
       onConfirm: async () => {
         try {
-          await api.patch(
-            `/evacuees/${evacuee.evacuee_id}/checkout`
+          const result = await api.patch(
+            `/evacuees/${evacuee.evacuee_id}/checkout`,
+            { record_id: evacuee.record_id }
           );
 
-          toast('Evacuee checked out successfully.', 'ok');
+          toast(savedMessage(result, 'Evacuee checked out successfully.'), 'ok');
 
           await load();
         } catch (error) {
@@ -594,7 +602,7 @@ export default function Evacuees({ ctx }) {
               }
 
               try {
-                await api.put(
+                const result = await api.put(
                   `/evacuees/${evacuee.evacuee_id}`,
                   {
                     ...form,
@@ -604,7 +612,7 @@ export default function Evacuees({ ctx }) {
 
                 closeModal();
 
-                toast('Evacuee updated successfully.', 'ok');
+                toast(savedMessage(result, 'Evacuee updated successfully.'), 'ok');
 
                 await load();
               } catch (error) {
@@ -751,40 +759,11 @@ export default function Evacuees({ ctx }) {
               }
 
               try {
-                await api.post('/evacuees/register', {
-                  family_id: form.family_id || undefined,
-                  family: {
-                    family_name: form.family_name.trim(),
-
-                    barangay: form.barangay,
-
-                    contact_number: normalizePhPhone(
-                      form.contact_number
-                    ),
-                  },
-
-                  evacuee: {
-                    first_name: form.first_name.trim(),
-
-                    middle_name: form.middle_name.trim(),
-
-                    last_name: form.last_name.trim(),
-
-                    age: parseInt(form.age, 10),
-
-                    gender: form.gender,
-                  },
-
-                  center_id: form.center_id,
-
-                  incident_id: form.incident_id,
-
-                  priority_types: form.priority_types,
-                });
+                const result = await api.post('/evacuees/register', registrationPayload(form));
 
                 closeModal();
 
-                toast('Evacuee registered successfully.', 'ok');
+                toast(savedMessage(result, 'Evacuee registered successfully.'), 'ok');
 
                 await load();
               } catch (error) {
@@ -1266,6 +1245,7 @@ export default function Evacuees({ ctx }) {
 
                         <p className="text-[0.78125rem] font-bold text-navy-900">
                           {evacuee.first_name} {evacuee.last_name}
+                          {evacuee.pending_sync && <span className="pending-sync-badge">Pending sync</span>}
                         </p>
 
                         {evacuee.middle_name && (
@@ -1504,7 +1484,7 @@ export default function Evacuees({ ctx }) {
         {!loading && <div className="lg:hidden divide-y divide-slate-100">
           {pager.items.map(person => <article key={person.evacuee_id} className="p-4 sm:p-5 space-y-3">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0"><h3 className="font-semibold text-sm break-words">{person.first_name} {person.last_name}</h3>
+              <div className="min-w-0"><h3 className="font-semibold text-sm break-words">{person.first_name} {person.last_name}</h3>{person.pending_sync && <span className="pending-sync-badge">Pending sync</span>}
                 <p className="text-xs text-slate-500 mt-1">{person.age} years · {person.gender} · {person.family_name}</p></div>
               <Badge className={getStatusClass(person.record_status)}>{person.record_status}</Badge>
             </div>
@@ -1788,7 +1768,7 @@ function EditForm({
    REGISTER FORM
 ===================================================== */
 
-function RegisterForm({
+export function RegisterForm({
   initial,
   ctl,
   centers,
@@ -1892,7 +1872,7 @@ function RegisterForm({
       <Field label="Household">
         <Ctrl><Select value={form.family_id} onChange={e => set('family_id', e.target.value)}>
           <option value="">Create a new household</option>
-          {families.map(f => <option key={f.family_id} value={f.family_id}>{f.family_name} · {f.barangay} · Household #{f.family_id}</option>)}
+          {families.map(f => <option key={f.family_id} value={f.family_id}>{f.family_name} · {f.barangay} · {isLocalId(f.family_id) ? 'Pending sync' : `Household #${f.family_id}`}</option>)}
         </Select></Ctrl>
         <p className="text-xs text-slate-500 mt-2">Choose an existing household when registering another family member.</p>
       </Field>

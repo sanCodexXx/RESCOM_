@@ -49,6 +49,7 @@ import WeatherCard from '../components/ui/WeatherCard.jsx';
 import Button from '../components/ui/Button.jsx';
 
 import { api } from '../lib/api.js';
+import { useSyncRefresh } from '../lib/useSyncRefresh.js';
 
 import { useUi } from '../context/UiContext.jsx';
 
@@ -312,6 +313,8 @@ export default function Dashboard({ onNav }) {
     }
   }, [toast, isAdmin]);
 
+
+  useSyncRefresh(() => load(false));
 
   useEffect(() => {
     load();

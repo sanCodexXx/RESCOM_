@@ -41,12 +41,10 @@ export default function AuthLayout({ children }) {
           <div><strong>RESCOM</strong><span>San Nicolas MDRRMO</span></div>
         </div>
         <div className="auth-form-area">{children}</div>
-        <footer className="auth-footer">Municipality of San Nicolas, Ilocos Norte</footer>
+      
       </div>
       <aside className="auth-feature" aria-hidden="true">
-        <div className="auth-feature-top"><span><i /> FIELD OPERATIONS</span><span>RESCOM / 01</span></div>
         <div className="auth-feature-copy">
-          <p>EVACUATION COORDINATION</p>
           <h2>Ready for<br />the field.</h2>
           <span>Register evacuees, monitor centers, and coordinate your response.</span>
         </div>

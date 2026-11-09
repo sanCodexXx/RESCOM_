@@ -1,0 +1,365 @@
+.starlink-page {
+  --starlink-ink: #142039;
+  --starlink-muted: #52617b;
+  --starlink-line: #dbe4f2;
+  display: grid;
+  gap: 18px;
+  width: min(100%, 1420px);
+  margin: 0 auto;
+  color: var(--starlink-ink);
+  animation: starlink-enter .38s ease both;
+}
+
+@keyframes starlink-enter {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: none; }
+}
+
+.starlink-hero {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 60px;
+  min-height: clamp(390px, 34vw, 520px);
+  padding: clamp(22px, 3.6vw, 55px);
+  overflow: hidden;
+  border: 1px solid #16243c;
+  border-radius: 22px;
+  background:
+    linear-gradient(90deg, #02050bdb 0%, #02071180 41%, #03061009 76%),
+    linear-gradient(0deg, #040910e0, transparent 70%),
+    #040910 url('../assets/starlink-orbital-window.webp') center 50% / cover no-repeat;
+  color: #f8faff;
+  box-shadow: 0 13px 34px #162c5a24;
+}
+
+.starlink-hero-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.starlink-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #dae7fb;
+  font-size: .7rem;
+  font-weight: 680;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+}
+
+.starlink-hero-copy {
+  width: min(100%, 560px);
+}
+
+.starlink-hero h1 {
+  margin: 0;
+  font-size: clamp(3.3rem, 8vw, 8rem);
+  font-weight: 740;
+  letter-spacing: -.065em;
+  line-height: .91;
+  text-transform: uppercase;
+}
+
+.starlink-hero-description {
+  max-width: 420px;
+  margin: 17px 0 21px;
+  color: #e0eafb;
+  font-size: clamp(.9rem, 1.4vw, 1.05rem);
+  line-height: 1.6;
+}
+
+.starlink-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.starlink-hero-link, .starlink-primary, .starlink-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 9px 13px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-size: .78rem;
+  font-weight: 670;
+}
+
+.starlink-hero-link {
+  border-color: #b7d2fa61;
+  background: #0e1928c7;
+  color: #f8faff;
+}
+
+.starlink-hero-link:hover {
+  background: #24334c;
+}
+
+.starlink-hero-actions a {
+  border-color: #e8f1ff;
+  background: #edf4ff;
+  color: #0c1b34;
+}
+
+.starlink-hero-actions a:hover {
+  background: #fff;
+}
+
+.starlink-grid, .starlink-guide {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.starlink-panel, .starlink-guide section {
+  min-width: 0;
+  padding: clamp(17px, 2.25vw, 26px);
+  border: 1px solid var(--starlink-line);
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: 0 4px 14px #112b5610;
+}
+
+#dish-setup {
+  scroll-margin-top: 80px;
+}
+
+.starlink-panel h2, .starlink-guide h2 {
+  color: var(--starlink-ink);
+  font-size: 1.15rem;
+  font-weight: 730;
+  letter-spacing: -.03em;
+  overflow-wrap: anywhere;
+}
+
+.starlink-panel-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  margin-bottom: 10px;
+  border-radius: 11px;
+  background: #eef4ff;
+  color: #285bbb;
+}
+
+.starlink-panel-description, .starlink-guide p, .starlink-hint, .starlink-help p {
+  margin: 5px 0 0;
+  color: var(--starlink-muted);
+  font-size: .82rem;
+  line-height: 1.55;
+}
+
+.starlink-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+  margin-top: 12px;
+}
+
+.starlink-fields label {
+  margin-top: 5px;
+  color: #2f3c55;
+  font-size: .78rem;
+  font-weight: 680;
+}
+
+.starlink-fields input {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid #d6e0ef;
+  border-radius: 9px;
+  background: #f7f9fd;
+  color: var(--starlink-ink);
+  font-size: .875rem;
+}
+
+.starlink-fields input::placeholder {
+  color: #64738c;
+}
+
+.starlink-hint {
+  font-size: .73rem;
+}
+
+.starlink-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.starlink-primary {
+  background: #142b50;
+  color: #fff;
+}
+
+.starlink-primary:hover {
+  background: #1d4175;
+}
+
+.starlink-secondary {
+  border-color: var(--starlink-line);
+  background: #f5f8fd;
+  color: #253654;
+}
+
+.starlink-secondary:hover {
+  background: #eaf1fc;
+}
+
+.starlink-notice {
+  color: #126448;
+  font-size: .78rem;
+}
+
+.starlink-monitor {
+  background: #f9fbff;
+}
+
+.starlink-panel-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.starlink-refresh {
+  display: grid;
+  place-items: center;
+  width: 39px;
+  height: 39px;
+  border: 1px solid var(--starlink-line);
+  border-radius: 10px;
+  background: white;
+  color: #254b7b;
+}
+
+.starlink-refresh:hover {
+  background: #eef4ff;
+}
+
+.starlink-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+  padding: 4px 9px;
+  border-radius: 99px;
+  background: #edf1f8;
+  color: #405474;
+  font-size: .72rem;
+  font-weight: 700;
+}
+
+.starlink-state span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.starlink-state-live {
+  background: #def7eb;
+  color: #116040;
+}
+
+.starlink-state-warn {
+  background: #fff2da;
+  color: #835018;
+}
+
+.starlink-report-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--starlink-line);
+  color: var(--starlink-muted);
+  font-size: .76rem;
+}
+
+.starlink-report-row svg {
+  flex-shrink: 0;
+}
+
+.starlink-report-row strong {
+  display: block;
+  color: var(--starlink-ink);
+}
+
+.starlink-help {
+  margin-top: 13px;
+  color: #285394;
+  font-size: .76rem;
+  font-weight: 650;
+}
+
+.starlink-help summary {
+  cursor: pointer;
+}
+
+.starlink-help p {
+  font-weight: 400;
+}
+
+.starlink-guide section {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.starlink-guide .starlink-panel-icon {
+  margin-bottom: 0;
+}
+
+.starlink-guide h2 {
+  font-size: .96rem;
+}
+
+.starlink-guide-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  color: #224e99;
+  font-size: .78rem;
+  font-weight: 680;
+}
+
+.starlink-guide-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 767px) {
+  .starlink-hero {
+    min-height: 368px;
+    gap: 70px;
+    padding: 18px;
+    border-radius: 17px;
+    background-position: center, center, 72% center;
+  }
+
+  .starlink-hero h1 {
+    font-size: clamp(2.85rem, 12vw, 4.3rem);
+  }
+
+  .starlink-hero-description {
+    margin: 12px 0 14px;
+  }
+
+  .starlink-grid, .starlink-guide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
