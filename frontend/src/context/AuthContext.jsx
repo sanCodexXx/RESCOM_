@@ -6,19 +6,19 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
 
   const bootstrap = useCallback(async () => {
     const token = localStorage.getItem('rescom_token');
-    if (!token) { setLoading(false); return; }
+    if (!token) return;
     try {
       const { user } = await api.get('/auth/me');
+      if (localStorage.getItem('rescom_token') !== token) return;
       setUser(user);
       getSocket().connect();
     } catch (e) {
-      if (e.status === 401 || e.status === 403) localStorage.removeItem('rescom_token');
-    } finally {
-      setLoading(false);
+      if (localStorage.getItem('rescom_token') === token && (e.status === 401 || e.status === 403)) {
+        localStorage.removeItem('rescom_token');
+      }
     }
   }, []);
 
@@ -52,7 +52,7 @@ export function AuthProvider({ children }) {
   const updateUser = useCallback((patch) => setUser((u) => ({ ...u, ...patch })), []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, login, register, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

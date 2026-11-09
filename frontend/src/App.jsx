@@ -5,9 +5,8 @@ import { Toasts } from './components/ui/Toasts.jsx';
 import { Skeleton } from './components/ui/DataStates.jsx';
 import Shell from './components/layout/Shell.jsx';
 
-import Splash from './pages/Splash.jsx';
-const Login = lazy(() => import('./pages/auth/Login.jsx'));
-const Register = lazy(() => import('./pages/auth/Register.jsx'));
+import Login from './pages/auth/Login.jsx';
+import Register from './pages/auth/Register.jsx';
 const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword.jsx'));
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
 const Centers = lazy(() => import('./pages/Centers.jsx'));
@@ -36,8 +35,7 @@ const AUTH_PAGES = {
 };
 
 export default function App() {
-  const { user, loading, logout } = useAuth();
-  const [showSplash, setShowSplash] = useState(true);
+  const { user, logout } = useAuth();
   const [authView, setAuthView] = useState('login');
   const [route, setRoute] = useState('dashboard');
   const [ctx, setCtx] = useState({});
@@ -52,11 +50,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const t = setTimeout(() => setShowSplash(false), 400);
-    return () => clearTimeout(t);
-  }, []);
-
-  useEffect(() => {
     if (user) setRoute('dashboard');
     else setAuthView('login'); // reset to login after logout
   }, [user?.user_id]);
@@ -68,17 +61,13 @@ export default function App() {
     window.scrollTo(0, 0);
   }, []);
 
-  if (showSplash) return <Splash />;
-
   const Page = PAGES[route] || Dashboard;
   const AuthPage = AUTH_PAGES[authView] || Login;
 
   return (
     <>
-      {loading ? (
-        <div className="min-h-screen grid place-items-center text-navy-900/50 text-sm">Loading RESCOM…</div>
-      ) : !user ? (
-        <Suspense fallback={<Skeleton label="Loading sign-in" />}><AuthPage goto={setAuthView} /></Suspense>
+      {!user ? (
+        <Suspense fallback={null}><AuthPage goto={setAuthView} /></Suspense>
       ) : (
         <Shell
           route={route}

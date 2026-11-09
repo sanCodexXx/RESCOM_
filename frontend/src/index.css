@@ -12,15 +12,6 @@ body {
 /* Flat app background (no blobs, no blur). */
 .rescom-bg { position: fixed; inset: 0; z-index: -10; background: #f3f6fc; }
 
-/* Dark navy surface used only for the splash screen and the auth backdrop,
-   independent of the light app background behind everything else. */
-.rescom-dark-surface {
-  background:
-    radial-gradient(closest-side, rgba(255,255,255,.08), transparent) 10% 15%/260px 260px no-repeat,
-    radial-gradient(closest-side, rgba(255,255,255,.06), transparent) 88% 82%/220px 220px no-repeat,
-    linear-gradient(160deg, #12224f 0%, #0B1A47 55%, #16255a 100%);
-}
-
 /* Solid surfaces (formerly glass). Class names kept so existing pages keep working. */
 .glass { background: #ffffff; border: 1px solid #e1e8f5; }
 .glass-strong { background: #ffffff; border: 1px solid #d5dff2; }
