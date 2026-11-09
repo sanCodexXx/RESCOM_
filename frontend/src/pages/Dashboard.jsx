@@ -451,7 +451,6 @@ export default function Dashboard({ onNav }) {
         <Button variant="ghost" onClick={() => navigate('dromic')}>Open PDF reports</Button>
       </div>
     </section>
-    <p className="text-xs text-slate-500">{lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })}` : 'Loading shared records…'}</p>
   </div>;
 
 
@@ -471,19 +470,6 @@ export default function Dashboard({ onNav }) {
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
 
-        <div className="flex items-center gap-2 text-[0.75rem] text-navy-900/50">
-          <CalendarDays size={15} />
-
-          <span>
-            {new Date().toLocaleDateString('en-PH', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              timeZone: 'Asia/Manila',
-            })}
-          </span>
-        </div>
 
         <div className="flex items-center gap-3">
 

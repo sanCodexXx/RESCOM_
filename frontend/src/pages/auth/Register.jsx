@@ -72,8 +72,7 @@ export default function Register({ goto }) {
         <button type="button" className="auth-primary" onClick={() => goto('login')}>Back to sign in <ArrowRight size={17} /></button>
       </> : <>
         <header className="auth-heading">
-          <p className="auth-eyebrow">ACCOUNT REQUEST</p>
-          <h1>Create an account.</h1>
+          <h2>Create an account.</h2>
           <p className="auth-subtitle">Enter your details and request your RESCOM role.</p>
         </header>
         <form className="auth-form auth-register-form" onSubmit={submit}>
@@ -85,7 +84,7 @@ export default function Register({ goto }) {
             <PasswordField label="Confirm password" autoComplete="new-password" value={form.confirm} onChange={change('confirm')} minLength={6} required />
           </div>
           <fieldset className="auth-roles">
-            <legend>Requested role</legend>
+            <legend>Role</legend>
             <div className="auth-role-grid">{roles.map(role => (
               <label key={role.value} className="auth-role">
                 <input type="radio" name="role" value={role.value} checked={form.role === role.value} onChange={change('role')} required />
@@ -95,7 +94,7 @@ export default function Register({ goto }) {
           </fieldset>
           <div className="auth-terms">
             <label className="auth-check"><input type="checkbox" aria-label="I accept the terms and privacy policy" checked={agree} onChange={event => setAgree(event.target.checked)} /> I accept the</label>
-            <button type="button" className="auth-link" onClick={reviewTerms}>terms and privacy policy</button>
+            <button type="button" className="auth-link" onClick={reviewTerms}>Terms and Privacy Policy</button>
           </div>
           {error && <p className="auth-error" role="alert">{error}</p>}
           <button type="submit" className="auth-primary" disabled={busy}>{busy ? 'Submitting…' : 'Create account'} <ArrowRight size={17} /></button>
