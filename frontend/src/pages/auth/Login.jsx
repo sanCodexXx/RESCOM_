@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Lock, User, WifiOff } from 'lucide-react';
+import { Lock, User } from 'lucide-react';
 import { AuthCard, AuthField, LoginLayout, PasswordField } from './AuthLayout.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useUi } from '../../context/UiContext.jsx';
 
-export default function Login({ goto, openOffline }) {
+export default function Login({ goto }) {
   const { login } = useAuth();
   const { toast } = useUi();
   const saved = localStorage.getItem('rescom_remember') || '';
@@ -37,8 +37,8 @@ export default function Login({ goto, openOffline }) {
           <p className="auth-subtitle">Login to continue to your account</p>
         </header>
         <form className="auth-form" onSubmit={submit}>
-          <AuthField label="Email or username" hideLabel leading={<User size={16} />} placeholder="Email or Username" autoComplete="username" inputMode="email" autoCapitalize="none" spellCheck={false} value={username} onChange={event => setUsername(event.target.value)} required />
-          <PasswordField hideLabel leading={<Lock size={16} />} placeholder="Password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required />
+          <AuthField label="Email or username" leading={<User size={16} />} autoComplete="username" inputMode="email" autoCapitalize="none" spellCheck={false} value={username} onChange={event => setUsername(event.target.value)} required />
+          <PasswordField leading={<Lock size={16} />} autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required />
           <div className="auth-form-row">
             <label className="auth-check"><input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)} /> Remember me</label>
             <button type="button" className="auth-link" onClick={() => goto('forgot')}>Forgot Password?</button>
@@ -47,13 +47,6 @@ export default function Login({ goto, openOffline }) {
           <button type="submit" className="auth-primary" disabled={busy}>{busy ? 'Signing in…' : 'Login'}</button>
         </form>
         <p className="auth-switch">Don't have an account? <button type="button" className="auth-link" onClick={() => goto('register')}>Sign up</button></p>
-        {openOffline && (
-          <p className="auth-switch">
-            <button type="button" className="auth-link inline-flex items-center gap-2" onClick={openOffline}>
-              <WifiOff size={16} aria-hidden="true" /> Open RESCOM offline
-            </button>
-          </p>
-        )}
       </AuthCard>
     </LoginLayout>
   );

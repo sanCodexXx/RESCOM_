@@ -1,64 +1,21 @@
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Building2, Download, FileBarChart, Plus, ShieldAlert, Trash2, Users } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useUi } from '../context/UiContext.jsx';
 import { usePagination } from '../hooks/usePagination.js';
-import { Pagination, Skeleton, LoadError, EmptyState as SharedEmptyState } from '../components/ui/DataStates.jsx';
-import React, { useEffect, useRef, useState } from 'react';
-import { Plus, FileBarChart, Users, Building2, ShieldAlert, Download, Lock, Activity, CheckCircle, AlertTriangle, ArrowUp, ArrowDown } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell, PieChart, Pie } from 'recharts';
 import { PageHeader } from '../components/layout/Shell.jsx';
+import { Pagination, Skeleton, LoadError, EmptyState } from '../components/ui/DataStates.jsx';
 import Button from '../components/ui/Button.jsx';
 import Badge, { STATUS_PILL } from '../components/ui/Badge.jsx';
-import { Field, Ctrl, TextArea, TextInput, Select } from '../components/ui/Field.jsx';
+import { Field, Ctrl, TextArea, Select } from '../components/ui/Field.jsx';
 import { api, savedMessage } from '../lib/api.js';
 import { isLocalId } from '../lib/fieldData.js';
+import { forgetCachedReport, resolveFieldId, subscribeSync, syncStatus } from '../lib/sync.js';
 import { useSyncRefresh } from '../lib/useSyncRefresh.js';
-import { BARANGAYS } from '../lib/barangays.js';
-import { useUi } from '../context/UiContext.jsx';
 import { getSocket } from '../lib/socket.js';
 
-// Database values stay Draft / Active / Finalized; these are the names people see.
-const STATUS_LABEL = { Draft: 'Draft', Active: 'On-Going', Finalized: 'Final' };
+const STATUS_LABEL = { Draft: 'Draft', Active: 'Issued', Finalized: 'Final' };
 const fmtAsOf = (d) => new Date(d).toLocaleString('en-PH', { timeZone: 'Asia/Manila', day: '2-digit', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' });
-
-const PERIODS = [
-  { key: 'month', label: 'This Month' },
-  { key: 'quarter', label: 'This Quarter' },
-  { key: 'year', label: 'This Year' },
-  { key: 'custom', label: 'Custom range' }
-];
-const BAR = '#4F6FE8';
-const PEAK = '#1B1464';
-const PALETTE = ['#4F6FE8', '#F59E0B', '#EF4444', '#16A34A', '#94A3B8', '#8B5CF6', '#0EA5E9', '#DB2777', '#64748B'];
-const dateInput = 'min-w-0 max-w-full rounded-xl border border-navy-900/15 bg-white px-3 py-2 text-[0.8125rem] text-navy-900';
-
-const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-// Start and end dates (YYYY-MM-DD) of the period picked in the filter bar.
-function periodRange(key) {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  if (key === 'month') return [iso(new Date(y, m, 1)), iso(new Date(y, m + 1, 0))];
-  if (key === 'quarter') {
-    const q = Math.floor(m / 3) * 3;
-    return [iso(new Date(y, q, 1)), iso(new Date(y, q + 3, 0))];
-  }
-  if (key === 'year') return [`${y}-01-01`, `${y}-12-31`];
-  return null;
-}
-
-function fmtDay(s) {
-  const [y, m, d] = s.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('en-PH', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-// The barangay list is stored as "Barangay 1 - San Francisco (Pob.)"; charts show just "Barangay 1".
-const shortName = (n) => String(n).split(' - ')[0];
-
-function pctChange(cur, prev) {
-  if (prev == null) return null;
-  if (prev === 0) return cur > 0 ? 'new' : null;
-  return Math.round(((cur - prev) / prev) * 100);
-}
 
 function saveBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -71,144 +28,75 @@ function saveBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-// Saves a chart (the SVG recharts draws) as a PNG.
-function savePng(container, filename) {
-  const svg = container && container.querySelector('svg');
-  if (!svg) return;
-  const { width, height } = svg.getBoundingClientRect();
-  const xml = new XMLSerializer().serializeToString(svg);
-  const img = new Image();
-  img.onload = () => {
-    const scale = 2;
-    const canvas = document.createElement('canvas');
-    canvas.width = width * scale;
-    canvas.height = height * scale;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.scale(scale, scale);
-    ctx.drawImage(img, 0, 0, width, height);
-    canvas.toBlob((blob) => { if (blob) saveBlob(blob, filename); }, 'image/png');
-  };
-  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
-}
-
-export default function DromicReports() {
-  const { user: currentUser } = useAuth();
-  const isAdmin = currentUser?.role === 'ADMIN_STAFF';
+export default function DromicReports({ ctx, onNav }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN_STAFF';
   const { toast, openModal, closeModal, openConfirm } = useUi();
-
-  // Dashboard filters
-  const [period, setPeriod] = useState('quarter');
-  const [custom, setCustom] = useState(() => periodRange('quarter'));
-  const [brgy, setBrgy] = useState('');
-  const [from, to] = period === 'custom' ? custom : periodRange(period);
-  const invalid = !from || !to || from > to;
-
-  // Dashboard data (live from the database)
-  const [overview, setOverview] = useState(null);
-  const [overviewLoading, setOverviewLoading] = useState(true);
-  const [overviewError, setOverviewError] = useState('');
-
-  // Per-incident DROMIC reports
+  const { reachable, needsSignIn } = useSyncExternalStore(subscribeSync, syncStatus);
   const [reports, setReports] = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [listLoading, setListLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const loadId = useRef(0);
 
-  async function loadOverview() {
-    if (invalid) { setOverview(null); setOverviewLoading(false); return; }
-    setOverviewLoading(true); setOverviewError('');
+  const loadReports = useCallback(async () => {
+    const id = ++loadId.current;
+    setListLoading(true);
+    setLoadError('');
     try {
-      const qs = new URLSearchParams({ from, to, ...(brgy ? { brgy } : {}) });
-      setOverview(await api.get(`/analytics/overview?${qs}`));
-    } catch (e) {
-      setOverviewError(e.code === 'OFFLINE_VIEW' ? 'Connect to RESCOM to load figures for this period.' : e.message);
-      if (e.code !== 'OFFLINE_VIEW') toast(e.message, 'bad');
+      const [savedReports, currentIncidents] = await Promise.all([api.get('/dromic'), api.get('/incidents')]);
+      if (id !== loadId.current) return;
+      setReports(savedReports);
+      setIncidents(currentIncidents);
+    } catch (error) {
+      if (id === loadId.current) setLoadError(error.message);
+    } finally {
+      if (id === loadId.current) setListLoading(false);
     }
-    finally { setOverviewLoading(false); }
-  }
-  // Socket handlers run with whatever filters were current when they were attached, so they call through a ref.
-  const overviewRef = useRef(loadOverview);
-  overviewRef.current = loadOverview;
-
-  async function loadReports() {
-    setListLoading(true); setLoadError('');
-    try {
-      const [r, i] = await Promise.all([api.get('/dromic'), api.get('/incidents')]);
-      setReports(r); setIncidents(i);
-    } catch (e) { setLoadError(e.message); toast(e.message, 'bad'); }
-    finally { setListLoading(false); }
-  }
-
-  useSyncRefresh(() => { loadReports(); if (isAdmin) loadOverview(); });
-
-  useEffect(() => { if (isAdmin) loadOverview(); else setOverviewLoading(false); }, [from, to, brgy, isAdmin]);
-
-  useEffect(() => {
-    loadReports();
-    const s = getSocket();
-    const refresh = () => { loadReports(); if (isAdmin) overviewRef.current(); };
-    const events = ['dromic_report_generated', 'evacuee_registered', 'incident_status_changed', 'new_incident_dispatched'];
-    events.forEach(e => s.on(e, refresh));
-    return () => events.forEach(e => s.off(e, refresh));
   }, []);
 
-  const pager = usePagination(reports, '');
+  useSyncRefresh(loadReports);
+  useEffect(() => {
+    loadReports();
+    const socket = getSocket();
+    const events = ['dromic_report_generated', 'incident_status_changed', 'new_incident_dispatched'];
+    events.forEach(event => socket.on(event, loadReports));
+    return () => {
+      loadId.current++;
+      events.forEach(event => socket.off(event, loadReports));
+    };
+  }, [loadReports]);
 
-  // ---------- period report (the Generate Report button) ----------
-
-  function openPeriodReport() {
-    const form = { type: 'monthly', from, to, brgy };
-    openModal({
-      title: 'Generate Report',
-      sub: 'Export a situational report for submission',
-      body: <PeriodReportForm form={form} />,
-      footer: <>
-        <Button variant="ghost" block onClick={closeModal}>Cancel</Button>
-        <Button block onClick={() => runPeriodExport(form)}><Download size={14} />Generate</Button>
-      </>
-    });
-  }
-
-  async function runPeriodExport(form) {
-    if (!form.from || !form.to || form.from > form.to) { toast('Check the From and To dates', 'bad'); return; }
-    try {
-      const qs = new URLSearchParams({
-        type: form.type, from: form.from, to: form.to, format: 'pdf',
-        ...(form.brgy ? { brgy: form.brgy } : {})
-      });
-      const blob = await api.download(`/analytics/export?${qs}`);
-      saveBlob(blob, `Situational-Report-${form.from}-to-${form.to}.pdf`);
-      closeModal();
-      toast('Report downloaded', 'ok');
-    } catch (e) { toast(e.message, 'bad'); }
-  }
-
-  // ---------- per-incident DROMIC reports (numbered, Draft / Active / Final) ----------
+  const incidentId = resolveFieldId(ctx?.incidentId);
+  const incident = incidents.find(row => String(row.incident_id) === String(incidentId));
+  const visibleReports = incidentId == null ? reports : reports.filter(row => String(row.incident_id) === String(incidentId));
+  const pager = usePagination(visibleReports, incidentId);
 
   function newIncidentReport() {
-    const finalIds = new Set(reports.filter(r => r.reporting_status === 'Finalized').map(r => r.incident_id));
-    const open = incidents.filter(i => !finalIds.has(i.incident_id));
-    if (!open.length) { toast('Every incident already has a final report. Log a new incident first.', 'bad'); return; }
-    const form = { incident_id: open[0].incident_id, field_remarks: '' };
+    const finalIds = new Set(reports.filter(row => row.reporting_status === 'Finalized').map(row => String(row.incident_id)));
+    const available = (incidentId == null ? incidents : incidents.filter(row => row === incident))
+      .filter(row => !finalIds.has(String(row.incident_id)));
+    if (!available.length) {
+      toast(incident ? 'This incident already has a final report.' : 'Select an incident that has no final report yet.', 'bad');
+      return;
+    }
+    const form = { incident_id: available[0].incident_id, field_remarks: '' };
     openModal({
       title: 'Generate DROMIC Report',
-      sub: 'Creates a numbered report with figures from the server. Offline requests wait for sync.',
-      body: <GenerateForm incidents={open} reports={reports} form={form} />,
+      sub: 'Save a numbered snapshot of evacuation figures for this incident.',
+      body: <GenerateForm incidents={available} form={form} />,
       footer: <>
         <Button variant="ghost" block onClick={closeModal}>Cancel</Button>
         <Button block onClick={async () => {
-          if (!form.incident_id) { toast('Select a disaster incident', 'bad'); return; }
           try {
-            const r = await api.post('/dromic', form);
+            const report = await api.post('/dromic', form);
             closeModal();
-            toast(savedMessage(r, `DROMIC Report #${r.report_no} generated`), 'ok');
+            toast(savedMessage(report, `DROMIC Report #${report.report_no} generated`), 'ok');
             loadReports();
-            if (r?.queued) return;
-            const inc = incidents.find(i => String(i.incident_id) === String(form.incident_id));
-            await downloadPdf({ ...r, disaster_name: inc?.disaster_name });
-          } catch (e) { toast(e.message, 'bad'); }
+            if (report.queued) return;
+            const source = available.find(row => String(row.incident_id) === String(form.incident_id));
+            await downloadPdf({ ...report, disaster_name: source?.disaster_name });
+          } catch (error) { toast(error.message, 'bad'); }
         }}><FileBarChart size={14} />Generate</Button>
       </>
     });
@@ -219,12 +107,14 @@ export default function DromicReports() {
     try {
       const data = await api.get(`/dromic/${r.report_id}/summary`);
       const t = data.totals || {};
+      const snapshot = data.isSnapshot ?? Boolean(data.incident_status);
       openModal({
         title: `DROMIC Report #${r.report_no} on ${r.disaster_name}`,
-        sub: `as of ${fmtAsOf(r.as_of || r.report_date)} · ${STATUS_LABEL[r.reporting_status]}`,
+        sub: `As of ${fmtAsOf(r.as_of || r.report_date)} · ${STATUS_LABEL[r.reporting_status]}`,
         body: (
           <div>
             <p className="text-xs text-slate-500 mb-4">Prepared by {[r.author_first, r.author_last].filter(Boolean).join(' ') || 'MDRRMO staff'} · {r.brgy || 'All barangays'}</p>
+            {data.report?.incident_status && <p className="text-xs mb-4">{snapshot ? 'Incident status at reporting time' : 'Current incident status'} <Badge className={STATUS_PILL[data.report.incident_status]}>{data.report.incident_status}</Badge></p>}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
               <MiniStat icon={<Users size={16} />} label="Persons now" value={t.persons_now} />
               <MiniStat icon={<Users size={16} />} label="Persons (cum)" value={t.persons_cum} />
@@ -254,12 +144,12 @@ export default function DromicReports() {
                 <p className="text-navy-900/65 text-[0.78125rem] leading-relaxed">{r.field_remarks}</p>
               </div>
             )}
-            <p className="text-[0.6875rem] text-navy-900/45 mt-4">Admin and Field Personnel can download the same PDF report snapshot. Its figures reflect the report’s as-of date and time.</p>
+            <p className="text-[0.6875rem] text-navy-900/45 mt-4">{snapshot ? 'Figures were saved at the report’s as-of time.' : 'This earlier report uses current figures.'}</p>
           </div>
         ),
         footer: <>
           <Button variant="ghost" block onClick={closeModal}>Close</Button>
-          {isAdmin && r.reporting_status === 'Draft' && <Button variant="ghost" onClick={() => { closeModal(); setStatus(r, 'Active'); }}>Activate</Button>}
+          {isAdmin && r.reporting_status === 'Draft' && <Button variant="ghost" onClick={() => { closeModal(); setStatus(r, 'Active'); }}>Issue</Button>}
           {isAdmin && r.reporting_status === 'Active' && <Button variant="ghost" onClick={() => { closeModal(); finalize(r); }}>Finalize</Button>}
           <Button block disabled={isLocalId(r.report_id)} onClick={() => downloadPdf(r)}><Download size={14} />Download PDF</Button>
         </>
@@ -285,357 +175,106 @@ export default function DromicReports() {
   function finalize(r) {
     openConfirm({
       title: `Finalize Report #${r.report_no}?`,
-      msg: `This makes it the <b>final report</b> for ${r.disaster_name || 'this incident'}. A final report is locked, and no new reports can be generated for this incident afterwards.`,
+      msg: `This makes it the <b>final report</b> for the incident and locks it against further changes.`,
       onConfirm: () => setStatus(r, 'Finalized')
     });
   }
 
-  const k = overview?.kpis;
-
-  return (
-    <>
-      {listLoading && <Skeleton label="Loading reports" />}
-      <LoadError message={overviewError} onRetry={loadOverview} />
-      <LoadError message={loadError} onRetry={loadReports} />
-      <PageHeader
-        title="DROMIC Reports"
-        subtitle="Shared PDF reports for evacuation operations"
-        actions={<Button onClick={openPeriodReport}><Download size={14} />Generate Report</Button>}
-      />
-
-      {isAdmin && <details className="glass rounded-glass p-4 mb-5"><summary className="cursor-pointer font-semibold text-sm">Analytics and period filters</summary><div className="mt-4">
-      {/* Filters */}
-      <div className="glass rounded-glass shadow-glass-sm p-3 mb-2 flex flex-wrap items-center gap-2">
-        {PERIODS.map(p => (
-          <button key={p.key} type="button" onClick={() => setPeriod(p.key)}
-            className={`px-4 py-2 rounded-xl text-[0.8125rem] font-semibold border transition ${period === p.key ? 'bg-accent-600 text-white border-transparent' : 'bg-white text-navy-900/75 border-navy-900/15 hover:bg-navy-900/5'}`}>
-            {p.label}
-          </button>
-        ))}
-        {period === 'custom' && (
-          <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <input aria-label="From date" type="date" value={custom[0]} onChange={e => setCustom([e.target.value, custom[1]])} className={dateInput} />
-            <span className="text-navy-900/40 text-[0.8125rem]">to</span>
-            <input aria-label="To date" type="date" value={custom[1]} onChange={e => setCustom([custom[0], e.target.value])} className={dateInput} />
-          </div>
-        )}
-        <select aria-label="Filter by barangay" value={brgy} onChange={e => setBrgy(e.target.value)} className={`ml-auto ${dateInput}`}>
-          <option value="">All barangays</option>
-          {BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
-        </select>
-      </div>
-      <p className="text-[0.75rem] text-navy-900/55 mb-4">
-        {invalid
-          ? 'Choose a From date on or before the To date.'
-          : `Showing ${fmtDay(from)} – ${fmtDay(to)}${overview ? `, compared with ${fmtDay(overview.period.prevFrom)} – ${fmtDay(overview.period.prevTo)}` : ''}.`}
-      </p>
-
-      {!invalid && overviewLoading && !overview && <Skeleton label="Loading analytics" rows={3} />}
-
-      {!invalid && overview && (
-        <>
-          {/* KPI cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
-            <KpiCard tone="red" icon={<AlertTriangle size={20} />} label="Total Incidents" value={k.incidents.value}>
-              <CountDelta cur={k.incidents.value} prev={k.incidents.prev} />
-            </KpiCard>
-            <KpiCard tone="blue" icon={<Users size={20} />} label="Evacuees Served" value={k.evacuees.value.toLocaleString()}>
-              <CountDelta cur={k.evacuees.value} prev={k.evacuees.prev} />
-            </KpiCard>
-            <KpiCard tone="green" icon={<Activity size={20} />} label="Avg. Response Time" value={k.responseMinutes.value == null ? '—' : `${Math.round(k.responseMinutes.value)} min`}>
-              <ResponseDelta cur={k.responseMinutes.value} prev={k.responseMinutes.prev} />
-              <div className="text-[0.6875rem] text-navy-900/45 mt-0.5">Logged to first evacuee registered</div>
-            </KpiCard>
-            <KpiCard tone="amber" icon={<CheckCircle size={20} />} label="Resolution Rate" value={k.resolution.total ? `${Math.round((k.resolution.resolved / k.resolution.total) * 100)}%` : '—'}>
-              <span className="text-navy-900/55">{k.resolution.resolved} of {k.resolution.total} incidents resolved</span>
-            </KpiCard>
-          </div>
-
-          {/* Incidents: monthly bars + type breakdown */}
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 mb-4">
-            <div className="xl:col-span-3"><MonthlyChart data={overview.monthly} /></div>
-            <div className="xl:col-span-2"><TypeDonut data={overview.byType} total={k.incidents.value} /></div>
-          </div>
-
-          {/* Evacuees: 14-day trend + top barangays */}
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 mb-4">
-            <div className="xl:col-span-3"><TrendChart data={overview.trend14} /></div>
-            <div className="xl:col-span-2"><BarangayBars data={overview.topBarangays} /></div>
-          </div>
-        </>
-      )}
-
-      </div></details>}
-
-      {/* Per-incident DROMIC reports */}
-      <div className="flex flex-wrap items-end justify-between gap-3 mt-8 mb-3">
-        <div>
-          <h2 className="text-[1.0625rem] font-bold text-navy-900 m-0">Incident DROMIC Reports</h2>
-          <p className="text-[0.78125rem] text-navy-900/55 mt-0.5">Shared PDF report snapshots for each disaster incident</p>
-        </div>
-        <Button onClick={newIncidentReport}><Plus size={14} />New incident report</Button>
-      </div>
-
-      <div className="hidden md:block glass rounded-glass shadow-glass-sm overflow-x-auto scroll-thin">
-        <table className="w-full min-w-[820px] border-collapse">
-          <thead>
-            <tr>{['Report No.', 'Incident', 'As of', 'Status', 'Actions'].map(h => (
-              <th key={h} className="text-left text-[0.6875rem] uppercase tracking-wide text-navy-900/45 font-semibold px-4 py-3">{h}</th>
-            ))}</tr>
-          </thead>
-          <tbody>
-            {pager.items.map(r => (
-              <tr key={r.report_id} className="border-b border-navy-900/8 cursor-pointer hover:bg-navy-900/4" onClick={() => viewSummary(r)}>
-                <td className="px-4 py-3 text-[0.78125rem] text-navy-900"><b>{isLocalId(r.report_id) ? 'Pending sync' : `#${r.report_no ?? r.report_id}`}</b></td>
-                <td className="px-4 py-3 text-[0.78125rem] text-navy-900"><b>{r.disaster_name || '—'}</b></td>
-                <td className="px-4 py-3 text-[0.75rem] text-navy-900/55">{fmtAsOf(r.as_of || r.report_date)}</td>
-                <td className="px-4 py-3"><Badge className={STATUS_PILL[r.reporting_status]}>{STATUS_LABEL[r.reporting_status]}</Badge></td>
-                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                  <div className="flex gap-1.5 items-center">
-                    <Button size="sm" variant="ghost" disabled={isLocalId(r.report_id)} onClick={() => viewSummary(r)}>View report</Button>
-                    <Button size="sm" disabled={isLocalId(r.report_id)} onClick={() => downloadPdf(r)}><Download size={13} />PDF</Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {!listLoading && <div className="md:hidden space-y-3">
-        {pager.items.map(report => <article key={report.report_id} className="glass rounded-glass p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2"><span className="text-xs text-slate-500">{isLocalId(report.report_id) ? 'Pending sync' : `Report #${report.report_no ?? report.report_id}`}</span><Badge className={STATUS_PILL[report.reporting_status]}>{STATUS_LABEL[report.reporting_status]}</Badge></div>
-          <h3 className="font-semibold text-sm break-words">{report.disaster_name || 'Incident report'}</h3>
-          <p className="text-xs text-slate-500">As of {fmtAsOf(report.as_of || report.report_date)}</p>
-          <div className="flex gap-2"><Button size="sm" variant="ghost" className="flex-1" disabled={isLocalId(report.report_id)} onClick={() => viewSummary(report)}>View report</Button><Button size="sm" className="flex-1" disabled={isLocalId(report.report_id)} onClick={() => downloadPdf(report)}><Download size={14} />PDF</Button></div>
-        </article>)}
-      </div>}
-      {!listLoading && !loadError && !reports.length && <SharedEmptyState title="No DROMIC reports yet" message="Use Generate Report above to prepare a report for the selected period or incident." />}
-      {!listLoading && <Pagination pager={pager} />}
-    </>
-  );
-}
-
-// ---------- dashboard pieces ----------
-
-const TONES = {
-  red: { box: 'bg-danger-bg', fg: 'text-danger' },
-  blue: { box: 'bg-accent-50', fg: 'text-accent-700' },
-  green: { box: 'bg-success-bg', fg: 'text-success' },
-  amber: { box: 'bg-[#FFF4E5]', fg: 'text-[#C2670B]' }
-};
-
-function KpiCard({ tone, icon, label, value, children }) {
-  const t = TONES[tone];
-  return (
-    <div className="glass rounded-glass shadow-glass-sm p-5 flex gap-4">
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${t.box} ${t.fg}`}>{icon}</div>
-      <div className="min-w-0">
-        <div className={`text-[0.78125rem] font-semibold ${t.fg}`}>{label}</div>
-        <div className="text-[1.75rem] font-bold text-navy-900 leading-tight">{value}</div>
-        <div className="text-[0.75rem] mt-0.5">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function CountDelta({ cur, prev }) {
-  const p = pctChange(cur, prev);
-  if (p === null) return <span className="text-navy-900/50">No comparison data</span>;
-  if (p === 'new') return <span className="text-navy-900/60">New this period</span>;
-  if (p === 0) return <span className="text-navy-900/50">No change vs last period</span>;
-  const up = p > 0;
-  return (
-    <span className="inline-flex items-center gap-1 text-navy-900/60">
-      {up ? <ArrowUp size={12} /> : <ArrowDown size={12} />}{Math.abs(p)}% vs last period
-    </span>
-  );
-}
-
-// Faster response is an improvement, so it shows green.
-function ResponseDelta({ cur, prev }) {
-  if (cur == null || prev == null) return <span className="text-navy-900/50">Not enough data to compare</span>;
-  const diff = Math.round((prev - cur) * 10) / 10;
-  if (diff > 0) return <span className="inline-flex items-center gap-1 text-success"><ArrowDown size={12} />{diff} min improvement</span>;
-  if (diff < 0) return <span className="inline-flex items-center gap-1 text-danger"><ArrowUp size={12} />{-diff} min slower</span>;
-  return <span className="text-navy-900/50">No change vs last period</span>;
-}
-
-function Panel({ title, action, children }) {
-  return (
-    <div className="glass rounded-glass shadow-glass-sm p-5 h-full">
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <h3 className="font-bold text-[0.9375rem] text-navy-900 m-0">{title}</h3>
-        {action}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function Empty({ children }) {
-  return <p className="text-navy-900/45 text-[0.78125rem] py-10 text-center">{children}</p>;
-}
-
-function MonthlyChart({ data }) {
-  const ref = useRef(null);
-  const peak = data.length ? Math.max(...data.map(m => m.incidents)) : 0;
-  return (
-    <Panel
-      title="Incidents Reported"
-      action={
-        <button type="button" onClick={() => savePng(ref.current, 'incidents-reported.png')}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-navy-900/15 bg-white px-3 py-1.5 text-[0.75rem] font-semibold text-navy-900/75 hover:bg-navy-900/5">
-          <Download size={13} />PNG
-        </button>
+  function removeReport(report) {
+    openConfirm({
+      title: `Delete DROMIC Report #${report.report_no ?? report.report_id}?`,
+      msg: 'This removes the report from the list. The disaster incident stays in RESCOM.',
+      confirmLabel: 'Delete report',
+      onConfirm: async () => {
+        await api.del(`/dromic/${report.report_id}`);
+        await forgetCachedReport(report.report_id).catch(() => {});
+        setReports(rows => rows.filter(row => row.report_id !== report.report_id));
+        toast('Report deleted', 'ok');
+        await loadReports();
       }
-    >
-      {peak === 0 ? <Empty>No incidents logged in this period.</Empty> : (
-        <div ref={ref}>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e9f2" />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#0B1A47AA' }} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#0B1A47AA' }} />
-              <Tooltip contentStyle={{ borderRadius: 10, fontSize: 12, border: '1px solid #e1e8f5' }} />
-              <Bar dataKey="incidents" name="Incidents" radius={[6, 6, 0, 0]}>
-                {data.map((m, i) => <Cell key={i} fill={m.incidents === peak ? PEAK : BAR} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-    </Panel>
-  );
-}
-
-function TypeDonut({ data, total }) {
-  return (
-    <Panel title="Incidents by Type">
-      {!data.length ? <Empty>No incidents in this period.</Empty> : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
-          <div className="relative h-[220px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={data.map(d => ({ name: d.type, value: d.count }))} dataKey="value" nameKey="name" innerRadius={62} outerRadius={92} paddingAngle={2}>
-                  {data.map((d, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
-                </Pie>
-                <Tooltip contentStyle={{ borderRadius: 10, fontSize: 12, border: '1px solid #e1e8f5' }} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <b className="text-[1.5rem] text-navy-900 leading-none">{total}</b>
-              <span className="text-[0.71875rem] text-navy-900/50 mt-1">reports</span>
-            </div>
-          </div>
-          <ul className="space-y-2.5">
-            {data.map((d, i) => (
-              <li key={d.type} className="flex items-center gap-2 text-[0.8125rem]">
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PALETTE[i % PALETTE.length] }} />
-                <span className="flex-1 text-navy-900/80 truncate">{d.type}</span>
-                <b className="text-navy-900">{Math.round(d.pct)}%</b>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </Panel>
-  );
-}
-
-function TrendChart({ data }) {
-  const hasAny = data.some(d => d.evacuees > 0);
-  return (
-    <Panel title="Evacuee Trend (last 14 days)">
-      {!hasAny ? <Empty>No evacuees registered in the last 14 days.</Empty> : (
-        <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e9f2" />
-            <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#0B1A47AA' }} interval="preserveStartEnd" />
-            <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#0B1A47AA' }} />
-            <Tooltip contentStyle={{ borderRadius: 10, fontSize: 12, border: '1px solid #e1e8f5' }} />
-            <Bar dataKey="evacuees" name="Evacuees registered" fill={BAR} radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      )}
-    </Panel>
-  );
-}
-
-function BarangayBars({ data }) {
-  if (!data.length) {
-    return <Panel title="Top Affected Barangays"><Empty>No evacuees registered in this period.</Empty></Panel>;
+    });
   }
-  const max = Math.max(...data.map(b => b.persons), 1);
-  return (
-    <Panel title="Top Affected Barangays">
-      <ul className="space-y-4">
-        {data.map(b => (
-          <li key={b.barangay}>
-            <div className="flex items-baseline justify-between gap-2 text-[0.8125rem]">
-              <span className="text-navy-900/85 font-semibold truncate" title={b.barangay}>{shortName(b.barangay)}</span>
-              <span className="text-navy-900/60 shrink-0">{b.persons} persons · {b.families} families</span>
-            </div>
-            <div className="mt-1.5 h-2 rounded-full bg-navy-900/8 overflow-hidden">
-              <div className="h-full rounded-full bg-accent-500" style={{ width: `${(b.persons / max) * 100}%` }} />
-            </div>
-          </li>
-        ))}
-      </ul>
-    </Panel>
-  );
-}
 
-// ---------- modal forms ----------
-
-function PeriodReportForm({ form }) {
-  const [type, setType] = useState(form.type);
-  const [from, setFrom] = useState(form.from);
-  const [to, setTo] = useState(form.to);
-
-  // Monthly and quarterly reports fill in their own dates; custom keeps whatever was typed.
-  function pickType(t) {
-    setType(t); form.type = t;
-    if (t !== 'custom') {
-      const [a, b] = periodRange(t === 'monthly' ? 'month' : 'quarter');
-      setFrom(a); setTo(b); form.from = a; form.to = b;
-    }
-  }
+  const actions = {
+    isAdmin, canDelete: reachable && !needsSignIn, onView: viewSummary, onDownload: downloadPdf, onRemove: removeReport
+  };
+  const reportNumber = report => isLocalId(report.report_id) ? 'Pending sync' : `#${report.report_no ?? report.report_id}`;
 
   return (
     <>
-      <Field label="Report Type">
-        <Ctrl><Select value={type} onChange={e => pickType(e.target.value)}>
-          <option value="monthly">Monthly Situational Report</option>
-          <option value="quarterly">Quarterly Situational Report</option>
-          <option value="custom">Custom Period Report</option>
-        </Select></Ctrl>
-      </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="From" required>
-          <Ctrl><TextInput type="date" value={from} onChange={e => { setFrom(e.target.value); form.from = e.target.value; }} /></Ctrl>
-        </Field>
-        <Field label="To" required>
-          <Ctrl><TextInput type="date" value={to} onChange={e => { setTo(e.target.value); form.to = e.target.value; }} /></Ctrl>
-        </Field>
-      </div>
-      <p className="text-sm font-semibold text-navy-900 mb-3">Output: PDF</p>
-      <p className="text-[0.71875rem] text-navy-900/55">
-        Covers {form.brgy ? `barangay ${form.brgy}` : 'all barangays'}. The figures are read from the live records when you generate the file.
-      </p>
+      <PageHeader title="DROMIC Reports" subtitle="Numbered reports for disaster incidents"
+        actions={<Button onClick={newIncidentReport} disabled={listLoading || !incidents.length}><Plus size={14} />New incident report</Button>} />
+      {incidentId != null && <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-semibold text-navy-900">{incident?.disaster_name || 'Selected incident'}</h2>
+          {incident && <span className="flex items-center gap-2 text-xs text-navy-900/60">Incident status <Badge className={STATUS_PILL[incident.reporting_status]}>{incident.reporting_status}</Badge></span>}
+        </div>
+        <Button size="sm" variant="ghost" onClick={() => onNav('dromic')}>All reports</Button>
+      </div>}
+      <LoadError message={loadError} onRetry={loadReports} />
+      {listLoading && <Skeleton label="Loading reports" />}
+      {pager.total > 0 && <>
+        <div className="hidden md:block glass rounded-glass shadow-glass-sm overflow-x-auto scroll-thin">
+          <table className="w-full min-w-[680px] border-collapse">
+            <thead>
+              <tr>{['Report No.', 'Incident', 'As of', 'Report status', 'Actions'].map(label => (
+                <th key={label} scope="col" className="text-left text-[0.6875rem] uppercase tracking-wide text-navy-900/45 font-semibold px-4 py-3">{label}</th>
+              ))}</tr>
+            </thead>
+            <tbody>
+              {pager.items.map(report => (
+                <tr key={report.report_id} className="border-b border-navy-900/8">
+                  <td className="px-4 py-3 text-[0.78125rem] font-bold text-navy-900">{reportNumber(report)}</td>
+                  <td className="px-4 py-3 text-[0.78125rem] font-bold text-navy-900">{report.disaster_name || '—'}</td>
+                  <td className="px-4 py-3 text-[0.75rem] text-navy-900/55">{fmtAsOf(report.as_of || report.report_date)}</td>
+                  <td className="px-4 py-3"><ReportStatus report={report} /></td>
+                  <td className="px-4 py-3"><ReportActions report={report} {...actions} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="md:hidden space-y-3">
+          {pager.items.map(report => <article key={report.report_id} className="glass rounded-glass p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2"><span className="text-xs text-slate-500">{reportNumber(report)}</span><ReportStatus report={report} /></div>
+            <h3 className="font-semibold text-sm break-words">{report.disaster_name || 'Incident report'}</h3>
+            <p className="text-xs text-slate-500">As of {fmtAsOf(report.as_of || report.report_date)}</p>
+            <ReportActions report={report} {...actions} />
+          </article>)}
+        </div>
+        <Pagination pager={pager} />
+      </>}
+      {!listLoading && !loadError && !pager.total && <EmptyState title="No DROMIC reports yet" message={incident ? 'Generate a numbered report for this incident.' : 'Generate a report after logging a disaster incident.'} />}
     </>
   );
 }
 
-function GenerateForm({ incidents, reports, form }) {
+function ReportStatus({ report }) {
+  return <Badge className={STATUS_PILL[report.reporting_status]}>{STATUS_LABEL[report.reporting_status]}</Badge>;
+}
+
+function ReportActions({ report, isAdmin, canDelete, onView, onDownload, onRemove }) {
+  const local = isLocalId(report.report_id);
+  const deleteLabel = `Delete report #${report.report_no ?? report.report_id}`;
+  return <div className="flex flex-wrap gap-1.5 items-center">
+    <Button size="sm" variant="ghost" disabled={local} onClick={() => onView(report)}>View report</Button>
+    <Button size="sm" disabled={local} onClick={() => onDownload(report)}><Download size={14} aria-hidden="true" />PDF</Button>
+    {isAdmin && !local && report.reporting_status !== 'Finalized' && (
+      <Button size="sm" variant="ghost" disabled={!canDelete || report.pending_sync} aria-label={deleteLabel} title={canDelete ? deleteLabel : 'Connect to RESCOM to delete reports'} onClick={() => onRemove(report)}>
+        <Trash2 size={15} aria-hidden="true" />
+      </Button>
+    )}
+  </div>;
+}
+
+function GenerateForm({ incidents, form }) {
   const [incidentId, setIncidentId] = useState(String(form.incident_id));
-  const next = (reports.filter(r => String(r.incident_id) === incidentId).reduce((m, r) => Math.max(m, r.report_no || 0), 0)) + 1;
   return (
     <>
       <Field label="Disaster Incident" required>
         <Ctrl><Select value={incidentId} onChange={e => { setIncidentId(e.target.value); form.incident_id = e.target.value; }}>
           {incidents.map(i => <option key={i.incident_id} value={i.incident_id}>{i.disaster_name} — {i.brgy || 'San Nicolas'}</option>)}
         </Select></Ctrl>
-        <p className="text-[0.71875rem] text-navy-900/55 mt-1.5">This will be <b>DROMIC Report #{next}</b> for the selected incident.</p>
       </Field>
       <Field label="Field Remarks (optional)">
         <Ctrl><TextArea placeholder="Relief distribution status, ongoing needs, notes for the record…" onChange={e => (form.field_remarks = e.target.value)} /></Ctrl>

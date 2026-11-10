@@ -189,7 +189,8 @@ CREATE TABLE DROMIC_REPORTS (
   field_remarks    TEXT,
   report_no        INTEGER,
   as_of            TIMESTAMP,
-  snapshot         JSONB
+  snapshot         JSONB,
+  deleted_at       TIMESTAMPTZ
 );
 
 -- ------------------------------------------------------------

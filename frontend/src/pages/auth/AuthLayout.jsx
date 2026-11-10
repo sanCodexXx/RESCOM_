@@ -6,11 +6,11 @@ import medicsHero from '../../assets/medicnobg.png';
 import ambulance from '../../assets/ambulance2buddies.png';
 import './AuthLayout.css';
 
-export function AuthField({ label, hideLabel = false, leading, trailing, ...input }) {
+export function AuthField({ label, leading, trailing, ...input }) {
   const id = useId();
   return (
     <div className="auth-field">
-      <label htmlFor={id} className={hideLabel ? 'sr-only' : undefined}>{label}</label>
+      <label htmlFor={id}>{label}</label>
       <div className="auth-field-control">
         {leading && <span className="auth-field-leading" aria-hidden="true">{leading}</span>}
         <input id={id} {...input} />

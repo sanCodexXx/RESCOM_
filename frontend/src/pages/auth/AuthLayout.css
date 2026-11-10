@@ -43,7 +43,7 @@
   min-width: 0;
 }
 
-.auth-field label, .auth-roles legend {
+.auth-field label {
   color: var(--auth-label, #354159);
   font-size: .8rem;
   font-weight: 650;
@@ -145,7 +145,7 @@
   cursor: pointer;
 }
 
-.auth-check input, .auth-role input {
+.auth-check input {
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
@@ -203,17 +203,6 @@
   font-size: .81rem;
 }
 
-.auth-role-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 6px;
-}
-
-.auth-roles {
-  min-width: 0;
-}
-
 .auth-role {
   display: flex;
   align-items: center;
@@ -227,11 +216,6 @@
   font-size: .78rem;
   font-weight: 620;
   cursor: pointer;
-}
-
-.auth-role:has(input:checked) {
-  border-color: var(--auth-blue);
-  background: #eaf1ff;
 }
 
 .auth-step-icon {

@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { AtSign, Clock3, Lock, Mail, User } from 'lucide-react';
+import { AtSign, ClipboardList, Clock3, Lock, Mail, ShieldCheck, User } from 'lucide-react';
 import { AuthCard, AuthField, PasswordField, RegisterLayout } from './AuthLayout.jsx';
 import Button from '../../components/ui/Button.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useUi } from '../../context/UiContext.jsx';
 
 const roles = [
-  { value: 'ADMIN_STAFF', label: 'Admin Staff' },
-  { value: 'FIELD_PERSONNEL', label: 'Field Personnel' }
+  { value: 'ADMIN_STAFF', label: 'Admin Staff', icon: ShieldCheck, description: 'Coordinate operations and review records.' },
+  { value: 'FIELD_PERSONNEL', label: 'Field Personnel', icon: ClipboardList, description: 'Record incidents and assist at evacuation centers.' }
 ];
 
 const terms = (
@@ -27,6 +27,7 @@ export default function Register({ goto }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
+  const selectedRole = roles.find(role => role.value === form.role);
   const change = field => event => setForm(previous => ({ ...previous, [field]: event.target.value }));
 
   async function submit(event) {
@@ -40,7 +41,7 @@ export default function Register({ goto }) {
     const email = form.email.trim();
     if (!/^\S+@\S+\.\S+$/.test(email)) return setError('Enter a valid email address.');
     if (form.password !== form.confirm) return setError('Passwords do not match.');
-    if (!roles.some(role => role.value === form.role)) return setError('Choose a role.');
+    if (!selectedRole) return setError('Choose a role.');
     if (!agree) return setError('Accept the terms and privacy policy to continue.');
     setError('');
     setBusy(true);
@@ -56,6 +57,12 @@ export default function Register({ goto }) {
     } finally { setBusy(false); }
   }
 
+  function chooseRole(role) {
+    setForm(previous => ({ ...previous, role }));
+    setError('');
+    window.scrollTo(0, 0);
+  }
+
   function reviewTerms() {
     openModal({ title: 'Terms and privacy policy', body: terms,
       footer: <Button onClick={() => { setAgree(true); closeModal(); }}>I agree</Button> });
@@ -68,36 +75,50 @@ export default function Register({ goto }) {
           <header className="auth-heading">
             <div className="auth-step-icon"><Clock3 size={21} /></div>
             <h1>Request Submitted</h1>
-            <p className="auth-subtitle">An MDRRMO administrator will review your request for {roles.find(role => role.value === form.role)?.label} access.</p>
+            <p className="auth-subtitle">An MDRRMO administrator will review your request for {selectedRole?.label} access.</p>
           </header>
           <button type="button" className="auth-primary" onClick={() => goto('login')}>Back to Login</button>
         </> : <>
-          <header className="auth-heading">
-            <h1>Create Your Account</h1>
-            <p className="auth-subtitle">Enter your details to finish signing up</p>
-          </header>
-          <form className="auth-form auth-register-form" onSubmit={submit}>
-            <AuthField label="Full name" hideLabel leading={<User size={16} />} placeholder="Full Name" autoComplete="name" value={form.name} onChange={change('name')} maxLength={201} required />
-            <AuthField label="Email address" hideLabel leading={<Mail size={16} />} placeholder="Email Address" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} value={form.email} onChange={change('email')} maxLength={150} required />
-            <AuthField label="Username" hideLabel leading={<AtSign size={16} />} placeholder="Username" autoComplete="username" autoCapitalize="none" spellCheck={false} value={form.username} onChange={change('username')} maxLength={100} required />
-            <PasswordField label="Password" hideLabel leading={<Lock size={16} />} placeholder="Password" autoComplete="new-password" value={form.password} onChange={change('password')} minLength={6} required />
-            <PasswordField label="Confirm password" hideLabel leading={<Lock size={16} />} placeholder="Confirm Password" autoComplete="new-password" value={form.confirm} onChange={change('confirm')} minLength={6} required />
-            <fieldset className="auth-roles">
-              <legend>Requested role</legend>
-              <div className="auth-role-grid">{roles.map(role => (
-                <label key={role.value} className="auth-role">
-                  <input type="radio" name="role" value={role.value} checked={form.role === role.value} onChange={change('role')} required />
-                  {role.label}
+          {selectedRole ? <>
+            <header className="auth-heading">
+              <h1>Create Your Account</h1>
+              <p className="auth-subtitle">Registering as <strong>{selectedRole.label}</strong> <button type="button" className="auth-link ml-1" disabled={busy} onClick={() => chooseRole('')}>Change role</button></p>
+            </header>
+            <form className="auth-form auth-register-form" onSubmit={submit}>
+              <AuthField label="Full name" leading={<User size={16} />} autoComplete="name"
+                value={form.name} onChange={change('name')} maxLength={201} required />
+              <AuthField label="Email address" leading={<Mail size={16} />} type="email" autoComplete="email"
+                autoCapitalize="none" spellCheck={false} value={form.email} onChange={change('email')} maxLength={150} required />
+              <AuthField label="Username" leading={<AtSign size={16} />} autoComplete="username"
+                autoCapitalize="none" spellCheck={false} value={form.username} onChange={change('username')} maxLength={100} required />
+              <PasswordField label="Password" leading={<Lock size={16} />} autoComplete="new-password"
+                value={form.password} onChange={change('password')} minLength={6} required />
+              <PasswordField label="Confirm password" leading={<Lock size={16} />} autoComplete="new-password"
+                value={form.confirm} onChange={change('confirm')} minLength={6} required />
+              <div className="auth-terms">
+                <label className="auth-check">
+                  <input type="checkbox" aria-label="I accept the terms and privacy policy" checked={agree} onChange={event => setAgree(event.target.checked)} />
+                  I accept the
                 </label>
-              ))}</div>
-            </fieldset>
-            <div className="auth-terms">
-              <label className="auth-check"><input type="checkbox" aria-label="I accept the terms and privacy policy" checked={agree} onChange={event => setAgree(event.target.checked)} /> I accept the</label>
-              <button type="button" className="auth-link" onClick={reviewTerms}>terms and privacy policy</button>
+                <button type="button" className="auth-link" onClick={reviewTerms}>terms and privacy policy</button>
+              </div>
+              {error && <p className="auth-error" role="alert">{error}</p>}
+              <button type="submit" className="auth-primary" disabled={busy}>{busy ? 'Submitting…' : 'Sign Up'}</button>
+            </form>
+          </> : <>
+            <header className="auth-heading">
+              <h1>Choose Your Role</h1>
+              <p className="auth-subtitle">Select how you’ll use RESCOM.</p>
+            </header>
+            <div className="grid gap-3" aria-label="Account roles">
+              {roles.map(({ value, label, icon: Icon, description }) => (
+                <button key={value} type="button" className="auth-role w-full text-left hover:border-accent-500" onClick={() => chooseRole(value)}>
+                  <span className="shrink-0 grid place-items-center w-9 h-9 rounded-lg bg-accent-50 text-accent-700"><Icon size={18} aria-hidden="true" /></span>
+                  <span><strong className="block text-sm">{label}</strong><span className="text-xs font-normal text-slate-600">{description}</span></span>
+                </button>
+              ))}
             </div>
-            {error && <p className="auth-error" role="alert">{error}</p>}
-            <button type="submit" className="auth-primary" disabled={busy}>{busy ? 'Submitting…' : 'Sign Up'}</button>
-          </form>
+          </>}
           <p className="auth-switch">Already have an account? <button type="button" className="auth-link" onClick={() => goto('login')}>Login</button></p>
         </>}
       </AuthCard>

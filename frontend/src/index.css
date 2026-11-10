@@ -113,8 +113,7 @@ main { padding-bottom: 6rem !important; }
   50% { transform: rotate(9deg); }
 }
 .connection-online { color: #127a45; }
-.connection-offline, .connection-unavailable { padding: 10px 14px; border: 1px solid #ead4b1; border-radius: 10px; background: #fff9ed; color: #825011; }
-.connection-help { flex: 1; min-width: 180px; }
+.connection-offline { padding: 10px 14px; border: 1px solid #ead4b1; border-radius: 10px; background: #fff9ed; color: #825011; }
 .quick-actions { position: fixed; right: 18px; bottom: 18px; z-index: 25; }
 .quick-actions-toggle { display: flex; align-items: center; gap: 8px; padding: 14px 18px; border-radius: 30px; background: #2563eb; color: white; box-shadow: 0 6px 20px #1d4ed83a; font-size: .875rem; font-weight: 600; }
 .quick-actions-list { display: grid; gap: 6px; padding: 8px; margin-bottom: 10px; background: white; border: 1px solid var(--rescom-line); border-radius: 14px; box-shadow: 0 6px 20px #0b1a4718; }

@@ -25,7 +25,7 @@ const timeShort = d => new Date(d).toLocaleTimeString('en-US', { timeZone: TZ, h
 const dateTime = d => (d ? `${dateLong(d)}, ${timeShort(d)}` : '—');
 const n = v => Number(v || 0).toLocaleString('en-US');
 const plural = (c, one, many) => `${n(c)} ${c === 1 ? one : many}`;
-const STATUS_LABEL = { Draft: 'DRAFT', Active: 'ON-GOING', Finalized: 'FINAL REPORT' };
+const STATUS_LABEL = { Draft: 'DRAFT', Active: 'ISSUED', Finalized: 'FINAL REPORT' };
 const INCIDENT_LABEL = { Pending: 'Pending response', 'En Route': 'Responders en route', Active: 'Active (on-going)', Resolved: 'Resolved' };
 
 function incidentSentence(report, name, where) {

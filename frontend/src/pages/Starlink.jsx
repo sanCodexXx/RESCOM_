@@ -161,8 +161,8 @@ export default function Starlink({ onNav }) {
         <section>
           <span className="starlink-panel-icon"><WifiOff size={19} aria-hidden="true" /></span>
           <div>
-            <h2>Prepare for an outage</h2>
-            <p>Enable offline access once while connected. Keep using the regular RESCOM screens. Pending saves sync when the server is reachable.</p>
+            <h2>Keep working during an outage</h2>
+            <p>After sign-in, RESCOM prepares this browser automatically. Use the regular forms when the connection drops. Pending saves sync as soon as RESCOM reconnects.</p>
           </div>
         </section>
       </div>

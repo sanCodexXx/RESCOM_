@@ -6,14 +6,14 @@ Open the dish icon beside **Search** to reach the Starlink screen. Both Admin St
 
 Connect your laptop or phone to an active Starlink kit through your device’s Wi-Fi settings. Open RESCOM normally. **RESCOM online** means the browser can reach the RESCOM backend. Saving a Terminal ID enables optional diagnostics through a relay. [Starlink installation guide](https://starlink.com/public-files/StarlinkInstallGuide_Rectangular_English.pdf)
 
-During an outage, RESCOM saves changes on the prepared browser through the regular forms. When RESCOM is reachable, it syncs over Starlink, regular Wi-Fi, or mobile data. See [OFFLINE_SETUP.md](OFFLINE_SETUP.md).
+RESCOM prepares the signed-in browser for offline work automatically. During an outage, the regular forms save supported changes on that browser. When RESCOM is reachable, it syncs over Starlink, regular Wi-Fi, or mobile data. See [OFFLINE_SETUP.md](OFFLINE_SETUP.md).
 
 ## Deploy this update
 
 1. Apply the source update to your RESCOM project and keep its existing environment files and hosting settings.
 2. Apply any missing database migrations in the order listed in [OFFLINE_SETUP.md](OFFLINE_SETUP.md).
 3. Deploy the backend on Render, then rebuild the frontend on Netlify with your existing `VITE_API_URL`.
-4. Sign in and check the Starlink icon and **Enable offline access** by the connection badge. You can test the offline workflow using your existing internet connection.
+4. Sign in and open the Starlink icon beside **Search**. You can test automatic offline saves and sync using your existing internet connection.
 
 ## Optional dish diagnostics
 

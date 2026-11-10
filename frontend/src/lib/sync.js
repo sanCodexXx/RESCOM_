@@ -9,9 +9,12 @@ const listeners = new Set();
 let active;
 let accessRevision = 0;
 let verified;
+let preparing;
+let warming;
+let shellPreparation;
 let reachable = true;
 let syncing = false;
-let status = { reachable: true, unlocked: false, pending: 0, review: [], syncing: false, needsSignIn: false };
+let status = { reachable: true, unlocked: false, pending: 0, review: [], syncing: false, needsSignIn: false, hasPreviousSaves: false };
 const savesInFlight = new Map();
 
 function currentToken() {
@@ -34,6 +37,7 @@ function publish() {
     pending: queue.filter(change => !change.review).length,
     review: queue.filter(change => change.review).map(({ id, label, review }) => ({ id, label, review })),
     syncing,
+    hasPreviousSaves: Boolean(active?.hasPreviousSaves),
     needsSignIn: Boolean(active && !authenticated(active))
   };
   listeners.forEach(notify => notify());
@@ -45,10 +49,8 @@ export function subscribeSync(listener) {
 }
 
 export const syncStatus = () => status;
-const deviceMode = () => localStorage.getItem('rescom_offline_ready');
-export const needsOfflineUpgrade = () => deviceMode() === '1';
-export const isPrepared = () => needsOfflineUpgrade() || deviceMode() === 'device';
-export const canOpenOffline = () => needsOfflineUpgrade() || (isPrepared() && Boolean(currentToken()));
+export const isPrepared = () => ['1', 'device'].includes(localStorage.getItem('rescom_offline_ready'));
+export const resolveFieldId = id => active?.workspace.aliases[id] ?? id;
 export const refreshRecords = () => window.dispatchEvent(new Event('rescom:records-updated'));
 
 function deviceIdentity(user) {
@@ -82,8 +84,8 @@ export function setReachable(online) {
   }
 }
 
-async function changeWorkspace(session, change) {
-  const workspace = await updateWorkspace(session.vault, change);
+async function changeWorkspace(session, change, options) {
+  const workspace = await updateWorkspace(session.vault, change, options);
   session.workspace = workspace;
   if (active === session) publish();
   return workspace;
@@ -99,7 +101,7 @@ function checkAccess(ownerId, token, revision) {
   }
 }
 
-function activate(session, apiOrigin, token, revision, trusted) {
+function activate(session, apiOrigin, token, revision) {
   if (session.workspace.apiOrigin !== apiOrigin) {
     throw new Error('This browser was prepared for a different RESCOM server.');
   }
@@ -108,21 +110,10 @@ function activate(session, apiOrigin, token, revision, trusted) {
     session.revision = 0;
     active = session;
   }
-  localStorage.setItem('rescom_offline_ready', trusted ? 'device' : '1');
+  active.token = token;
+  localStorage.setItem('rescom_offline_ready', 'device');
   publish();
   return active.workspace.user;
-}
-
-async function seedWorkspace(request, apiOrigin, user, token) {
-  if (!user || !verifiedAccount(user.user_id, token) || !navigator.onLine) {
-    throw new Error('Sign in while connected to prepare RESCOM for offline use.');
-  }
-  await prepareShell();
-  const views = Object.fromEntries(await Promise.all(
-    FIELD_VIEWS.map(async path => [path, await request(path, { token })])
-  ));
-  if (!verifiedAccount(user.user_id, token)) throw new Error('Sign in with the same account to prepare this browser.');
-  return { user: deviceIdentity(user), apiOrigin, views, queue: [], aliases: {} };
 }
 
 export async function restoreOffline(apiOrigin, savedProfile) {
@@ -130,71 +121,146 @@ export async function restoreOffline(apiOrigin, savedProfile) {
   if (!token || (!savedProfile && !isPrepared())) return null;
   const revision = accessRevision;
   const profile = savedProfile || await readDevice();
-  if (!profile) return null;
-  const confirmed = verifiedAccount(profile.ownerId, token);
-  const session = active?.vault.ownerId === profile.ownerId ? active : null;
-  if (!profile.key && (!session || !confirmed)) return null;
+  if (!profile?.key) return null;
 
+  const confirmed = verifiedAccount(profile.ownerId, token);
   const proof = await loginFingerprint(token);
   if (!confirmed && profile.loginProof !== proof) return null;
-  const saved = session || await openSavedDevice(profile);
+  const saved = active?.vault.ownerId === profile.ownerId ? active : await openSavedDevice(profile);
   if (saved.workspace.apiOrigin !== apiOrigin) return null;
   if (confirmed && profile.loginProof !== proof) {
-    if (!profile.key) await prepareShell();
     await rememberDeviceLogin(saved.vault, proof, () => checkAccess(profile.ownerId, token, revision));
   }
-  return activate(saved, apiOrigin, token, revision, true);
+  return activate(saved, apiOrigin, token, revision);
 }
 
-export async function openOffline(request, apiOrigin, user, passphrase) {
-  const token = currentToken();
+export function prepareOffline(apiOrigin) {
+  const { user, token } = verified || {};
+  if (!user || !verifiedAccount(user.user_id, token)) return Promise.resolve(null);
+  if (preparing?.token === token) return preparing.promise;
+  if (active?.token === token && active.workspace.apiOrigin === apiOrigin) return Promise.resolve(active.workspace.user);
+  if (!import.meta.env?.PROD || !navigator.serviceWorker || !navigator.locks || !globalThis.crypto?.subtle || !globalThis.indexedDB) {
+    return Promise.resolve(null);
+  }
   const revision = accessRevision;
-  const profile = await readDevice();
-  if (profile && user && user.user_id !== profile.ownerId) {
-    throw new Error('This browser is prepared for another account. Use a separate browser profile.');
-  }
-  if (profile?.key) {
-    const restored = await restoreOffline(apiOrigin, profile);
-    if (restored) return restored;
-    throw new Error('Sign in with the account that prepared this browser.');
-  }
-  if (!profile) {
-    const workspace = await seedWorkspace(request, apiOrigin, user, token);
-    const proof = await loginFingerprint(token);
+  const promise = (async () => {
+    let profile = await readDevice();
+    if (profile && profile.ownerId !== user.user_id) return null;
+    if (!profile?.key) {
+      const proof = await loginFingerprint(token);
+      const workspace = { user: deviceIdentity(user), apiOrigin, views: {}, queue: [], aliases: {} };
+      profile = await enrollDevice(user.user_id, workspace, proof, () => {
+        checkAccess(user.user_id, token, revision);
+        if (!verifiedAccount(user.user_id, token)) throw new Error('Sign in to save on this browser.');
+      });
+    }
     checkAccess(user.user_id, token, revision);
-    const session = await enrollDevice(user.user_id, workspace, proof);
-    return activate(session, apiOrigin, token, revision, true);
-  }
+    return restoreOffline(apiOrigin, profile);
+  })().finally(() => {
+    if (preparing?.promise === promise) preparing = undefined;
+  });
+  preparing = { token, promise };
+  return promise;
+}
 
-  if (!passphrase) {
-    localStorage.setItem('rescom_offline_ready', '1');
+export function preloadOfflineShell() {
+  if (!shellPreparation) {
+    shellPreparation = prepareShell().catch(error => {
+      shellPreparation = undefined;
+      throw error;
+    });
+  }
+  return shellPreparation;
+}
+
+export function warmOffline(request) {
+  const session = active;
+  if (!session || !canSend(session)) return Promise.resolve();
+  if (warming?.session === session) return warming.promise;
+
+  const paths = FIELD_VIEWS.filter(path => session.workspace.views[path] === undefined);
+  const shell = preloadOfflineShell();
+  if (!paths.length) return shell.catch(() => {});
+  const records = (async () => {
+    const revision = session.revision;
+    const results = await Promise.allSettled(paths.map(path => request(path, { token: verified.token, timeoutMs: 6000 })));
+    if (!canSend(session) || revision !== session.revision) return;
+    const available = paths.flatMap((path, index) => {
+      const result = results[index];
+      return result.status === 'fulfilled' && result.value != null ? [[path, result.value]] : [];
+    });
+    if (!available.length) return;
+    await changeWorkspace(session, workspace => {
+      if (revision !== session.revision || !canSend(session)) return workspace;
+      const missing = available.filter(([path]) => workspace.views[path] === undefined);
+      return { ...workspace, views: { ...Object.fromEntries(missing), ...workspace.views } };
+    });
+    if (active === session && !reachable) refreshRecords();
+  })();
+  const promise = Promise.allSettled([shell, records]).finally(() => {
+    if (warming?.promise === promise) warming = undefined;
+  });
+  warming = { session, promise };
+  return promise;
+}
+
+export async function recoverOfflineSaves(apiOrigin, passphrase) {
+  const session = active;
+  if (!canSend(session)) throw new Error('Sign in while connected to recover previous saves.');
+  const { previous } = await readDevice();
+  if (!previous) {
+    session.hasPreviousSaves = false;
+    if (active === session) publish();
+    return;
+  }
+  const old = await unlockLegacyDevice(previous, passphrase);
+  if (old.workspace && old.workspace.apiOrigin !== apiOrigin) {
+    throw new Error('These saves belong to a different RESCOM server.');
+  }
+  await preloadOfflineShell();
+  const queue = old.workspace?.queue ?? (await readQueue(old.vault)).map(entry => ({
+    id: entry.id, legacy: true, kind: 'registration', label: 'Evacuee registration',
+    path: '/evacuees/offline-registrations', method: 'POST', files: [],
+    body: {
+      ...registrationPayload(entry.form), owner_id: previous.ownerId, submission_id: entry.id,
+      captured_at: new Date(entry.createdAt).toISOString()
+    },
+    createdAt: new Date(entry.createdAt).toISOString(), review: entry.review
+  }));
+  await changeWorkspace(session, workspace => {
+    if (!canSend(session)) throw new Error('Sign in while connected to recover previous saves.');
+    session.revision++;
+    const existing = new Set(workspace.queue.map(entry => entry.id));
+    return {
+      ...workspace,
+      aliases: { ...old.workspace?.aliases, ...workspace.aliases },
+      queue: [...queue.filter(entry => !existing.has(entry.id)), ...workspace.queue]
+    };
+  }, { recoverPrevious: true });
+  session.hasPreviousSaves = false;
+  if (active === session) {
     publish();
-    throw new Error('Choose Upgrade offline access to transfer this browser’s previous saves.');
+    refreshRecords();
   }
-  const session = await unlockLegacyDevice(profile, passphrase);
-  if (!session.workspace) {
-    const workspace = await seedWorkspace(request, apiOrigin, user, token);
-    const legacy = await readQueue(session.vault);
-    workspace.queue = legacy.map(entry => ({
-      id: entry.id, legacy: true, kind: 'registration', label: 'Evacuee registration',
-      path: '/evacuees/offline-registrations', method: 'POST', files: [],
-      body: {
-        ...registrationPayload(entry.form), owner_id: profile.ownerId, submission_id: entry.id,
-        captured_at: new Date(entry.createdAt).toISOString()
-      },
-      createdAt: new Date(entry.createdAt).toISOString(), review: entry.review
-    }));
-    session.workspace = await updateWorkspace(session.vault, current => current || workspace);
-  }
+}
 
-  const trusted = verifiedAccount(profile.ownerId, token);
-  if (trusted) {
-    if (session.workspace.apiOrigin !== apiOrigin) throw new Error('This browser was prepared for a different RESCOM server.');
-    await prepareShell();
-    const proof = await loginFingerprint(token);
-    await rememberDeviceLogin(session.vault, proof, () => checkAccess(profile.ownerId, token, revision));
-  }
-  return activate(session, apiOrigin, token, revision, trusted);
+async function waitForPreparation() {
+  if (active || !preparing) return;
+  const { token, promise } = preparing;
+  await promise.catch(() => {});
+  if (token !== currentToken()) throw new Error('Your RESCOM session changed. Sign in again.');
+}
+
+export async function forgetCachedReport(reportId) {
+  const session = active;
+  if (!session) return;
+  session.revision++;
+  await changeWorkspace(session, workspace => {
+    const views = { ...workspace.views };
+    if (views['/dromic']) views['/dromic'] = views['/dromic'].filter(report => String(report.report_id) !== String(reportId));
+    delete views[`/dromic/${reportId}/summary`];
+    return { ...workspace, views };
+  });
 }
 
 function cachedView(session, path) {
@@ -206,25 +272,32 @@ function cachedView(session, path) {
 }
 
 export async function readFieldData(request, path) {
+  if (!fieldView(path)) return request(path);
+  await waitForPreparation();
   const session = active;
-  if (!session || !fieldView(path)) return request(path);
-  if (!canSend(session) || session.workspace.queue.some(change => !change.review)) return cachedView(session, path);
+  if (!session) return request(path);
+  if (!canSend(session)) return cachedView(session, path);
+  if (session.workspace.queue.some(change => !change.review) && projectedViews(session.workspace)[path] !== undefined) {
+    return cachedView(session, path);
+  }
   const revision = session.revision;
   try {
-    const data = await request(path, { token: verified.token });
-    if (active !== session) throw new Error('Open this account’s offline data to load this view.');
+    const data = await request(path, { token: verified.token, timeoutMs: 6000 });
+    if (active !== session) throw new Error('Your RESCOM session changed. Sign in again.');
     if (revision !== session.revision || !authenticated(session)) return cachedView(session, path);
-    if (data != null) {
-      await changeWorkspace(session, workspace => {
-        if (revision !== session.revision) return workspace;
-        const views = { ...workspace.views };
-        delete views[path];
-        views[path] = data;
-        const extra = Object.keys(views).filter(key => !FIELD_VIEWS.includes(key));
-        for (const key of extra.slice(0, Math.max(0, extra.length - 12))) delete views[key];
-        return { ...workspace, views };
-      }).catch(() => {});
+    if (data == null) {
+      setReachable(false);
+      return cachedView(session, path);
     }
+    await changeWorkspace(session, workspace => {
+      if (revision !== session.revision) return workspace;
+      const views = { ...workspace.views };
+      delete views[path];
+      views[path] = data;
+      const extra = Object.keys(views).filter(key => !FIELD_VIEWS.includes(key));
+      for (const key of extra.slice(0, Math.max(0, extra.length - 12))) delete views[key];
+      return { ...workspace, views };
+    }).catch(() => {});
     return revision === session.revision ? data : cachedView(session, path);
   } catch (error) {
     if (active === session && (error.network || error.status >= 500 || error.status === 401)) {
@@ -314,7 +387,7 @@ async function drain(request, session, target) {
       try {
         data = await request(change.path, {
           method: change.method, body: requestBody(change), formData: change.formData,
-          token: verified.token, headers, timeoutMs: 12000
+          token: verified.token, headers, timeoutMs: change.formData ? 20000 : 7000
         });
       } catch (error) {
         if (error.network || error.status >= 500 || error.status === 429) {
@@ -370,27 +443,26 @@ export function flushFieldWrites(request) {
   ));
 }
 
-export function saveFieldChange(request, path, options) {
-  const session = active;
+export async function saveFieldChange(request, path, options) {
   const descriptor = fieldSave(options.method, path);
-  if (!session || !descriptor) return request(path, options);
+  if (!descriptor) return request(path, options);
+  await waitForPreparation();
+  const session = active;
+  if (!session) return request(path, options);
   const key = options.formData ? options.body : JSON.stringify([path, options.method, options.body]);
   if (savesInFlight.has(key)) return savesInFlight.get(key);
   const save = (async () => {
     const change = await createChange(path, options, descriptor, session);
-    const persist = () => changeWorkspace(session, workspace => {
-      if (active !== session) throw new Error('Open this account’s offline data before saving.');
+    await changeWorkspace(session, workspace => {
+      if (active !== session) throw new Error('Your RESCOM session changed. Sign in again.');
       session.revision++;
       return { ...workspace, queue: [...workspace.queue, change] };
     });
-    if (!canSend(session)) {
-      await persist();
-      return { queued: true };
-    }
-    return navigator.locks.request('rescom-field-sync', async () => {
-      await persist();
-      return (await drain(request, session, change.id)) || { queued: true };
-    });
+    if (!canSend(session)) return { queued: true };
+    const response = await navigator.locks.request('rescom-field-sync', { ifAvailable: true }, lock => (
+      lock && canSend(session) ? drain(request, session, change.id) : undefined
+    ));
+    return response || { queued: true };
   })().finally(() => savesInFlight.delete(key));
   savesInFlight.set(key, save);
   return save;

@@ -1,11 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import { Wifi, WifiOff } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useUi } from '../../context/UiContext.jsx';
 import { api, BASE_URL } from '../../lib/api.js';
-import { discardReviewedWrite, isPrepared, needsOfflineUpgrade, refreshRecords, setReachable, subscribeSync, syncStatus } from '../../lib/sync.js';
+import { discardReviewedWrite, refreshRecords, setReachable, subscribeSync, syncStatus } from '../../lib/sync.js';
 import Button from './Button.jsx';
-import { useOfflineAccess } from './OfflineAccess.jsx';
 
 function SyncReview() {
   const { review, reachable, needsSignIn } = useSyncExternalStore(subscribeSync, syncStatus);
@@ -35,51 +34,46 @@ function SyncReview() {
 }
 
 export default function ConnectionStatus() {
-  const { refreshSession, signInToSync } = useAuth();
+  const { refreshSession, prepareDevice, signInToSync } = useAuth();
   const { openModal } = useUi();
-  const { openOffline, preparing } = useOfflineAccess();
   const { unlocked, pending, review, syncing, needsSignIn, reachable } = useSyncExternalStore(subscribeSync, syncStatus);
-  const [checking, setChecking] = useState(true);
-  const [offline, setOffline] = useState(!navigator.onLine);
   const controller = useRef(null);
+
   const check = useCallback(async () => {
     controller.current?.abort();
-    const current = new AbortController();
-    controller.current = current;
-    setOffline(!navigator.onLine);
     if (!navigator.onLine) {
+      controller.current = null;
       setReachable(false);
-      setChecking(false);
       return;
     }
-    setChecking(true);
-    const timeout = setTimeout(() => current.abort(), 12000);
+    const current = new AbortController();
+    controller.current = current;
+    const timeout = setTimeout(() => current.abort(), 6000);
     try {
       const response = await fetch(`${BASE_URL}/api/health`, { signal: current.signal, cache: 'no-store' });
       const body = await response.json();
-      if (!response.ok || body.status !== 'ok') throw new Error('unavailable');
+      if (!response.ok || body.status !== 'ok') throw new Error('RESCOM unavailable');
     } catch {
-      if (controller.current === current) {
-        setReachable(false);
-        setChecking(false);
-      }
+      if (controller.current === current) setReachable(false);
       return;
     } finally {
       clearTimeout(timeout);
     }
     if (controller.current !== current) return;
+
     const recovered = !syncStatus().reachable;
     setReachable(true);
-    setChecking(false);
-    if (syncStatus().needsSignIn && localStorage.getItem('rescom_token')) await refreshSession();
+    if (syncStatus().needsSignIn) await refreshSession();
+    if (controller.current !== current) return;
+    await prepareDevice().catch(() => {});
     await api.syncOffline().catch(() => {});
     if (recovered && controller.current === current && syncStatus().reachable) refreshRecords();
-  }, [refreshSession]);
+  }, [prepareDevice, refreshSession]);
 
   useEffect(() => {
     check();
     const checkVisible = () => { if (document.visibilityState === 'visible') check(); };
-    const timer = setInterval(checkVisible, 25000);
+    const timer = setInterval(checkVisible, 15000);
     document.addEventListener('visibilitychange', checkVisible);
     window.addEventListener('online', check);
     window.addEventListener('offline', check);
@@ -93,22 +87,14 @@ export default function ConnectionStatus() {
     };
   }, [check]);
 
-  const connection = offline ? 'offline' : !reachable ? 'unavailable' : checking ? 'checking' : 'online';
-  const labels = { checking: 'Checking connection', online: 'RESCOM online', offline: 'Offline', unavailable: 'Connection unavailable' };
-  return <div className={`connection-status connection-${connection}`}>
-    <span role="status" className="flex items-center gap-2">{reachable && !offline ? <Wifi size={15} /> : <WifiOff size={15} />}{labels[connection]}</span>
-    <button type="button" aria-label="Check API connection" title="Check API connection" disabled={checking} onClick={check}>
-      <RefreshCw size={14} className={checking ? 'animate-spin' : ''} />
-    </button>
-    {!unlocked && (isPrepared() || connection === 'online') && (
-      <button type="button" className="connection-offline-action" disabled={preparing} onClick={openOffline}>
-        <WifiOff size={14} aria-hidden="true" />
-        {preparing ? 'Preparing offline access…' : needsOfflineUpgrade() ? 'Upgrade offline access' : isPrepared() ? 'Open offline data' : 'Enable offline access'}
-      </button>
-    )}
-    {!unlocked && !reachable && !isPrepared() && <span>Enable offline access while connected to save on this browser.</span>}
-    {unlocked && <span role="status">{syncing ? 'Syncing saves…' : pending ? `${pending} pending sync` : review.length ? '' : 'No pending saves'}</span>}
-    {unlocked && needsSignIn && connection === 'online' && (
+  return <div className={`connection-status connection-${reachable ? 'online' : 'offline'}`}>
+    <span role="status" className="flex items-center gap-2">
+      {reachable ? <Wifi size={15} aria-hidden="true" /> : <WifiOff size={15} aria-hidden="true" />}
+      {reachable ? 'RESCOM online' : 'Offline mode'}
+    </span>
+    {!unlocked && !reachable && <span>Device saves unavailable</span>}
+    {(syncing || pending > 0) && <span role="status">{syncing ? 'Syncing saves…' : `${pending} pending sync`}</span>}
+    {unlocked && needsSignIn && reachable && (
       <button type="button" className="connection-offline-action" onClick={signInToSync}>Sign in to sync</button>
     )}
     {review.length > 0 && (

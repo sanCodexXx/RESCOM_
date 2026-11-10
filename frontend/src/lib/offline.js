@@ -93,7 +93,7 @@ export async function prepareShell() {
     };
     const timeout = setTimeout(() => {
       workers.removeEventListener('controllerchange', check);
-      reject(new Error('The offline screen is still downloading. Keep RESCOM open and try preparing again.'));
+      reject(new Error('The offline screen is still downloading. Keep RESCOM open while connected.'));
     }, 45000);
     workers.addEventListener('controllerchange', check);
     check();
@@ -105,18 +105,25 @@ export async function loginFingerprint(token) {
   return Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export async function enrollDevice(ownerId, workspace, loginProof) {
+export async function enrollDevice(ownerId, workspace, loginProof, validate) {
   const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
   const vault = { ownerId, key };
-  const profile = { ownerId, key, loginProof, workspace: await seal(vault, 'workspace', workspace) };
-  await stored('device', 'readwrite', store => store.add(profile, 'profile'));
-  navigator.storage?.persist?.().catch(() => {});
-  return { vault, workspace };
+  const encrypted = await seal(vault, 'workspace', workspace);
+  return navigator.locks.request('rescom-workspace', async () => {
+    const previous = await readDevice();
+    validate();
+    if (previous && previous.ownerId !== ownerId) throw new Error('This browser is prepared for another account.');
+    if (previous?.key) return previous;
+
+    const profile = { ownerId, key, loginProof, workspace: encrypted, previous };
+    await stored('device', 'readwrite', store => store.put(profile, 'profile'));
+    return profile;
+  });
 }
 
 export async function openSavedDevice(profile) {
   const vault = { ownerId: profile.ownerId, key: profile.key };
-  return { vault, workspace: await unseal(vault, 'workspace', profile.workspace) };
+  return { vault, workspace: await unseal(vault, 'workspace', profile.workspace), hasPreviousSaves: Boolean(profile.previous) };
 }
 
 export function rememberDeviceLogin(vault, loginProof, validate) {
@@ -145,12 +152,14 @@ export async function readWorkspace(vault) {
   return profile.workspace ? unseal(vault, 'workspace', profile.workspace) : null;
 }
 
-export function updateWorkspace(vault, change) {
+export function updateWorkspace(vault, change, { recoverPrevious = false } = {}) {
   return navigator.locks.request('rescom-workspace', async () => {
     const profile = await readDevice();
     if (profile?.ownerId !== vault.ownerId) throw new Error('This browser is prepared for another account.');
     const current = profile.workspace ? await unseal(vault, 'workspace', profile.workspace) : null;
+    if (recoverPrevious && !profile.previous) return current;
     const workspace = change(current);
+    if (recoverPrevious) delete profile.previous;
     const encrypted = await seal(vault, 'workspace', workspace);
     await stored('device', 'readwrite', store => store.put({ ...profile, workspace: encrypted }, 'profile'));
     return workspace;

@@ -26,11 +26,15 @@ self.addEventListener('fetch', event => {
 
   if (event.request.mode === 'navigate' && (url.pathname === '/' || url.pathname === '/index.html')) {
     event.respondWith((async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
       try {
-        const response = await fetch(event.request);
+        const response = await fetch(event.request, { signal: controller.signal });
         if (response.ok) return response;
       } catch {
         // The cached shell can open the local workspace without a network.
+      } finally {
+        clearTimeout(timeout);
       }
       const cache = await caches.open(CACHE_NAME);
       return (await cache.match('/index.html')) || Response.error();

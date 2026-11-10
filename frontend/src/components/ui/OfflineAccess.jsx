@@ -1,11 +1,10 @@
-import React, { useRef, useState } from 'react';
-import { useAuth } from '../../context/AuthContext.jsx';
+import React, { useState, useSyncExternalStore } from 'react';
+import { api } from '../../lib/api.js';
 import { useUi } from '../../context/UiContext.jsx';
-import { needsOfflineUpgrade } from '../../lib/sync.js';
+import { subscribeSync, syncStatus } from '../../lib/sync.js';
 import Button from './Button.jsx';
 
-function LegacyOfflineAccess({ restore }) {
-  const { openDevice } = useAuth();
+function RecoverSavesForm() {
   const { closeModal, toast } = useUi();
   const [passphrase, setPassphrase] = useState('');
   const [error, setError] = useState('');
@@ -17,9 +16,10 @@ function LegacyOfflineAccess({ restore }) {
     setError('');
     setBusy(true);
     try {
-      await openDevice(passphrase);
+      await api.recoverOfflineSaves(passphrase);
       closeModal();
-      toast(restore ? 'Previous offline saves opened.' : 'Offline access upgraded.');
+      toast('Previous saves recovered.');
+      api.syncOffline().catch(() => {});
     } catch (problem) {
       setError(problem.message);
     } finally {
@@ -37,42 +37,21 @@ function LegacyOfflineAccess({ restore }) {
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     <div className="flex justify-end gap-2">
       <Button type="button" variant="ghost" onClick={closeModal} disabled={busy}>Cancel</Button>
-      <Button type="submit" disabled={busy}>{busy ? 'Opening…' : restore ? 'Open saved work' : 'Transfer offline saves'}</Button>
+      <Button type="submit" disabled={busy}>{busy ? 'Recovering…' : 'Recover saves'}</Button>
     </div>
   </form>;
 }
 
-export function useOfflineAccess({ restore = false } = {}) {
-  const { openDevice, restoreDevice } = useAuth();
-  const { openModal, toast } = useUi();
-  const [preparing, setPreparing] = useState(false);
-  const running = useRef(false);
+export default function RecoverPreviousSaves() {
+  const { hasPreviousSaves, needsSignIn, reachable } = useSyncExternalStore(subscribeSync, syncStatus);
+  const { openModal } = useUi();
+  if (!hasPreviousSaves) return null;
 
-  async function openOffline() {
-    if (needsOfflineUpgrade()) {
-      openModal({
-        title: restore ? 'Open previous offline saves' : 'Upgrade offline access',
-        body: <LegacyOfflineAccess restore={restore} />
-      });
-      return;
-    }
-    if (running.current) return;
-    running.current = true;
-    setPreparing(true);
-    try {
-      if (restore) {
-        if (!await restoreDevice()) throw new Error('Sign in with the account that prepared this browser.');
-      } else {
-        await openDevice();
-        toast('This browser is ready for offline work.');
-      }
-    } catch (error) {
-      toast(error.message, 'bad');
-    } finally {
-      running.current = false;
-      setPreparing(false);
-    }
-  }
-
-  return { openOffline, preparing };
+  return <div className="glass rounded-glass p-4 text-center">
+    <p className="mb-2 text-sm text-slate-600">This browser has saves from the previous passphrase setup.</p>
+    <Button size="sm" variant="ghost" disabled={!reachable || needsSignIn}
+      onClick={() => openModal({ title: 'Recover previous saves', body: <RecoverSavesForm /> })}>
+      Recover previous saves
+    </Button>
+  </div>;
 }

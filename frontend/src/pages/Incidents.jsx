@@ -2,7 +2,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { usePagination } from '../hooks/usePagination.js';
 import { Pagination, Skeleton, LoadError, EmptyState as SharedEmptyState } from '../components/ui/DataStates.jsx';
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { FileText, Plus, Trash2 } from 'lucide-react';
 import { PageHeader } from '../components/layout/Shell.jsx';
 import Button from '../components/ui/Button.jsx';
 import Badge, { STATUS_PILL, SEV_PILL } from '../components/ui/Badge.jsx';
@@ -14,7 +14,7 @@ import { getSocket } from '../lib/socket.js';
 
 const STATUSES = ['Pending', 'En Route', 'Active', 'Resolved'];
 
-export default function Incidents({ ctx }) {
+export default function Incidents({ ctx, onNav }) {
   const { user: currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'ADMIN_STAFF';
   const { toast, openModal, closeModal, openConfirm } = useUi();
@@ -102,7 +102,7 @@ export default function Incidents({ ctx }) {
       <div className="glass rounded-glass shadow-glass-sm overflow-x-auto scroll-thin">
         <table className="w-full min-w-[760px] border-collapse">
           <thead>
-            <tr>{['Disaster', 'Type', 'Barangay', 'Severity', 'Status', 'Reported', ''].map(h => (
+            <tr>{['Disaster', 'Type', 'Barangay', 'Severity', 'Incident status', 'Reported', 'Actions'].map(h => (
               <th key={h} className="text-left text-[0.6875rem] uppercase tracking-wide text-navy-900/45 font-semibold px-4 py-3">{h}</th>
             ))}</tr>
           </thead>
@@ -119,7 +119,14 @@ export default function Incidents({ ctx }) {
                   </button>
                 </td>
                 <td className="px-4 py-3 text-[0.75rem] text-navy-900/45">{new Date(i.date_started).toLocaleString()}</td>
-                <td className="px-4 py-3">{isAdmin && <button aria-label={`Delete ${i.disaster_name}`} onClick={() => remove(i)} className="text-navy-900/45 hover:text-danger"><Trash2 size={15} /></button>}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="ghost" aria-label={`DROMIC reports for ${i.disaster_name}`} onClick={() => onNav('dromic', { incidentId: i.incident_id })}>
+                      <FileText size={14} aria-hidden="true" />Reports
+                    </Button>
+                    {isAdmin && <Button size="sm" variant="ghost" aria-label={`Delete ${i.disaster_name}`} onClick={() => remove(i)}><Trash2 size={15} aria-hidden="true" /></Button>}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

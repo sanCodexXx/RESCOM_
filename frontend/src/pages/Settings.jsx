@@ -1,26 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { User, Mail, Lock } from 'lucide-react';
 import { PageHeader } from '../components/layout/Shell.jsx';
 import Button from '../components/ui/Button.jsx';
+import RecoverPreviousSaves from '../components/ui/OfflineAccess.jsx';
 import { Field, Ctrl, TextInput } from '../components/ui/Field.jsx';
 import { api } from '../lib/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useUi } from '../context/UiContext.jsx';
 
 export default function Settings() {
-  const { user, updateUser, logout } = useAuth();
+  const { user, updateUser } = useAuth();
   const { toast } = useUi();
-  const [form, setForm] = useState({ first_name: user.first_name, last_name: user.last_name, email: user.email, password: '' });
-  const [textSize, setTextSize] = useState(() => Number(localStorage.getItem('rescom_text_size')) || 100);
-  useEffect(() => {
-    document.documentElement.style.fontSize = `${textSize}%`;
-    localStorage.setItem('rescom_text_size', String(textSize));
-  }, [textSize]);
+  const [form, setForm] = useState({ first_name: user.first_name || '', last_name: user.last_name || '', email: user.email || '', password: '' });
   const [busy, setBusy] = useState(false);
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
-  async function save() {
+  async function save(event) {
+    event.preventDefault();
+    if (busy) return;
     setBusy(true);
     try {
       const updated = await api.put('/users/me/profile', form);
@@ -35,9 +33,9 @@ export default function Settings() {
     <>
       <PageHeader title="Account Settings" subtitle="Manage your RESCOM account" />
 
-      <div className="max-w-[560px] flex flex-col gap-4">
+      <div className="mx-auto flex w-full max-w-[560px] flex-col gap-4">
         <div className="glass rounded-glass shadow-glass-sm p-6">
-          <div className="flex items-center gap-4 mb-6">
+          <div className="flex flex-col items-center gap-3 text-center mb-6">
             <div className="w-[64px] h-[64px] rounded-full bg-gradient-to-br from-accent-500 to-accent-700 border border-white/20 grid place-items-center text-white text-[1.125rem] font-bold">
               {user.first_name?.[0]}{user.last_name?.[0]}
             </div>
@@ -47,26 +45,21 @@ export default function Settings() {
             </div>
           </div>
 
-          <Field label="First Name"><Ctrl icon={<User size={16} />}><TextInput value={form.first_name} onChange={set('first_name')} /></Ctrl></Field>
-          <Field label="Last Name"><Ctrl icon={<User size={16} />}><TextInput value={form.last_name} onChange={set('last_name')} /></Ctrl></Field>
-          <Field label="Email Address"><Ctrl icon={<Mail size={16} />}><TextInput value={form.email} onChange={set('email')} /></Ctrl></Field>
-          <Field label="New Password (optional)">
-            <Ctrl icon={<Lock size={16} />}><TextInput type="password" placeholder="Leave blank to keep current password" value={form.password} onChange={set('password')} /></Ctrl>
-          </Field>
+          <form onSubmit={save} className="mx-auto max-w-[440px]">
+            <Field label="First Name"><Ctrl icon={<User size={16} />}><TextInput autoComplete="given-name" value={form.first_name} onChange={set('first_name')} /></Ctrl></Field>
+            <Field label="Last Name"><Ctrl icon={<User size={16} />}><TextInput autoComplete="family-name" value={form.last_name} onChange={set('last_name')} /></Ctrl></Field>
+            <Field label="Email Address"><Ctrl icon={<Mail size={16} />}><TextInput type="email" autoComplete="email" value={form.email} onChange={set('email')} /></Ctrl></Field>
+            <Field label="New Password (optional)">
+              <Ctrl icon={<Lock size={16} />}><TextInput type="password" autoComplete="new-password" placeholder="Leave blank to keep current password" value={form.password} onChange={set('password')} /></Ctrl>
+            </Field>
 
-          <div className="flex gap-2.5 mt-2">
-            <Button disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save Changes'}</Button>
-            <Button variant="ghost" onClick={() => setForm({ first_name: user.first_name, last_name: user.last_name, email: user.email, password: '' })}>Discard</Button>
-          </div>
+            <div className="flex flex-wrap justify-center gap-2.5 mt-2">
+              <Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save Changes'}</Button>
+              <Button variant="ghost" onClick={() => setForm({ first_name: user.first_name || '', last_name: user.last_name || '', email: user.email || '', password: '' })}>Discard</Button>
+            </div>
+          </form>
         </div>
-
-        <section className="glass rounded-glass p-6">
-          <h2 className="font-semibold text-navy-900 mb-2">Display preferences</h2>
-          <p className="text-sm text-slate-600 mb-4">Adjust interface text for this device.</p>
-          <label htmlFor="text-size" className="text-sm font-medium flex justify-between">Text size <output>{textSize}%</output></label>
-          <input id="text-size" aria-label="Text size" type="range" min="100" max="125" step="5" value={textSize} onChange={e => setTextSize(Number(e.target.value))} className="w-full my-4 accent-blue-600" />
-          <Button variant="ghost" size="sm" onClick={() => setTextSize(100)}>Reset text size</Button>
-        </section>
+        <RecoverPreviousSaves />
       </div>
     </>
   );

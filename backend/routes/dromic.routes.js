@@ -21,6 +21,7 @@ router.get('/', async (req, res) => {
     FROM DROMIC_REPORTS r
     LEFT JOIN DISASTER_INCIDENTS i ON i.incident_id = r.incident_id
     LEFT JOIN USERS u ON u.user_id = r.generated_by
+    WHERE r.deleted_at IS NULL
     ORDER BY r.report_date DESC, r.report_id DESC
   `);
   res.json(rows);
@@ -70,14 +71,14 @@ async function compileSummary(reportId) {
     FROM DROMIC_REPORTS r
     LEFT JOIN DISASTER_INCIDENTS i ON i.incident_id = r.incident_id
     LEFT JOIN USERS u ON u.user_id = r.generated_by
-    WHERE r.report_id = $1
+    WHERE r.report_id = $1 AND r.deleted_at IS NULL
   `, [reportId]);
   if (!report) return null;
   // Older reports (made before snapshots existed) are compiled live.
   const figures = report.snapshot || (report.incident_id ? await compileFigures(report.incident_id) : null);
   const { snapshot, ...rest } = report;
   if (figures?.incident_status) { rest.incident_status = figures.incident_status; rest.date_ended = figures.incident_date_ended || null; }
-  return { report: rest, ...figures };
+  return { report: rest, ...figures, isSnapshot: Boolean(snapshot) };
 }
 
 // GET /api/dromic/:id/summary
@@ -104,12 +105,12 @@ router.get('/:id/pdf', async (req, res) => {
 
 // PATCH /api/dromic/:id/status
 //   Draft      -> still being prepared
-//   Active     -> issued, the incident is still going (shown as "On-Going")
+//   Active     -> issued report, regardless of the incident’s current status
 //   Finalized  -> the final report, locked (shown as "Final")
 router.patch('/:id/status', requireRole('ADMIN_STAFF'), fieldWrite(200, async (req, client) => {
   const { reporting_status } = req.body;
   if (!STATUSES.includes(reporting_status)) throw writeError(400, `Status must be one of: ${STATUSES.join(', ')}`);
-  const { rows: [cur] } = await client.query('SELECT incident_id, reporting_status FROM DROMIC_REPORTS WHERE report_id = $1 FOR UPDATE', [req.params.id]);
+  const { rows: [cur] } = await client.query('SELECT incident_id, reporting_status FROM DROMIC_REPORTS WHERE report_id = $1 AND deleted_at IS NULL FOR UPDATE', [req.params.id]);
   if (!cur) throw writeError(404, 'Report not found');
   if (cur.reporting_status === 'Finalized') throw writeError(400, 'A final report is locked and cannot be changed.');
   if (cur.incident_id) await client.query('SELECT incident_id FROM DISASTER_INCIDENTS WHERE incident_id = $1 FOR UPDATE', [cur.incident_id]);
@@ -120,5 +121,17 @@ router.patch('/:id/status', requireRole('ADMIN_STAFF'), fieldWrite(200, async (r
   );
   return rows[0];
 }, (req, report) => emit('dromic_report_generated', report)));
+
+// Keep the assigned report number so the next report always gets a new one.
+router.delete('/:id', requireRole('ADMIN_STAFF'), fieldWrite(200, async (req, client) => {
+  const { rows: [report] } = await client.query(
+    'SELECT report_id, reporting_status FROM DROMIC_REPORTS WHERE report_id = $1 AND deleted_at IS NULL FOR UPDATE',
+    [req.params.id]
+  );
+  if (!report) throw writeError(404, 'Report not found');
+  if (report.reporting_status === 'Finalized') throw writeError(409, 'Final reports are locked.');
+  await client.query('UPDATE DROMIC_REPORTS SET deleted_at = NOW() WHERE report_id = $1', [report.report_id]);
+  return { report_id: report.report_id };
+}, (req, report) => emit('dromic_report_deleted', report)));
 
 module.exports = router;

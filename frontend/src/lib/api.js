@@ -1,5 +1,5 @@
 import { isLocalId } from './fieldData.js';
-import { flushFieldWrites, openOffline, readFieldData, restoreOffline, retryFieldWrites, saveFieldChange } from './sync.js';
+import { flushFieldWrites, prepareOffline, readFieldData, recoverOfflineSaves, restoreOffline, retryFieldWrites, saveFieldChange, warmOffline } from './sync.js';
 
 const BASE_URL = import.meta.env?.VITE_API_URL || 'http://localhost:5000';
 
@@ -72,7 +72,9 @@ export const api = {
   postForm: (path, obj) => save(path, { method: 'POST', body: toFormData(obj), formData: true }),
   putForm: (path, obj) => save(path, { method: 'PUT', body: toFormData(obj), formData: true }),
   getSession: (token, timeoutMs) => request('/auth/me', { token, timeoutMs }),
-  openOffline: (user, passphrase) => openOffline(request, BASE_URL, user, passphrase),
+  prepareOffline: () => prepareOffline(BASE_URL),
+  warmOffline: () => warmOffline(request),
+  recoverOfflineSaves: passphrase => recoverOfflineSaves(BASE_URL, passphrase),
   restoreOffline: () => restoreOffline(BASE_URL),
   syncOffline: () => flushFieldWrites(request),
   retryOffline: () => retryFieldWrites(request),
