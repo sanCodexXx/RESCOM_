@@ -12,6 +12,15 @@ body {
 /* Flat app background (no blobs, no blur). */
 .rescom-bg { position: fixed; inset: 0; z-index: -10; background: #f3f6fc; }
 
+/* Dark navy surface used only for the splash screen and the auth backdrop,
+   independent of the light app background behind everything else. */
+.rescom-dark-surface {
+  background:
+    radial-gradient(closest-side, rgba(255,255,255,.08), transparent) 10% 15%/260px 260px no-repeat,
+    radial-gradient(closest-side, rgba(255,255,255,.06), transparent) 88% 82%/220px 220px no-repeat,
+    linear-gradient(160deg, #12224f 0%, #0B1A47 55%, #16255a 100%);
+}
+
 /* Solid surfaces (formerly glass). Class names kept so existing pages keep working. */
 .glass { background: #ffffff; border: 1px solid #e1e8f5; }
 .glass-strong { background: #ffffff; border: 1px solid #d5dff2; }
@@ -36,124 +45,3 @@ body {
 .scroll-thin::-webkit-scrollbar-thumb { background: rgba(11,26,71,.18); border-radius: 99px; }
 
 input::placeholder, textarea::placeholder { color: rgba(11,26,71,.35); }
-
-/* Shared interface rules: one type scale, restrained surfaces and visible focus. */
-:root { --rescom-ink: #0b1a47; --rescom-line: #dce3ee; --rescom-muted: #52617a; }
-body { margin: 0; line-height: 1.5; }
-button, input, select, textarea { font: inherit; }
-button { touch-action: manipulation; }
-button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
-button:disabled { cursor: not-allowed; opacity: .5; }
-.rescom-button { min-height: 40px; box-shadow: none; }
-.glass, .glass-strong { border-color: var(--rescom-line); }
-.shadow-glass-sm { box-shadow: 0 1px 3px #0b1a4709; }
-main { padding-bottom: 6rem !important; }
-.data-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 48px 20px; text-align: center; }
-.data-empty-icon { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; background: #eef3ff; color: #2563eb; }
-.data-empty h3 { font-size: 1rem; font-weight: 650; }
-.data-empty p { max-width: 370px; font-size: .875rem; color: var(--rescom-muted); }
-.data-error { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px; margin-bottom: 20px; background: #fff4f3; border: 1px solid #f3c9c6; border-radius: 12px; color: #982c29; font-size: .875rem; }
-.data-error p { margin-top: 4px; font-size: .8125rem; }
-.data-skeleton { padding: 16px; background: white; border-radius: 12px; }
-.skeleton-row { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid #edf0f5; }
-.skeleton-block { display: block; border-radius: 6px; background: linear-gradient(90deg,#e9edf3 25%,#f7f9fc 50%,#e9edf3 75%); background-size: 200% 100%; animation: skeleton-shimmer 1.4s linear infinite; }
-.skeleton-avatar { width: 36px; height: 36px; border-radius: 10px; }
-@keyframes skeleton-shimmer { to { background-position: -200% 0; } }
-.data-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding: 14px 16px; background: white; border: 1px solid var(--rescom-line); border-radius: 12px; font-size: .8125rem; color: var(--rescom-muted); }
-.data-pagination button { min-width: 36px; height: 36px; display: inline-grid; place-items: center; border: 1px solid var(--rescom-line); border-radius: 8px; background: white; color: var(--rescom-ink); }
-.data-pagination button[aria-current] { color: white; border-color: #2563eb; background: #2563eb; }
-.data-pagination select { padding: 6px; border: 1px solid var(--rescom-line); border-radius: 8px; background: white; }
-.rescom-dialog { padding: 0; width: min(560px,calc(100vw - 32px)); max-height: calc(100dvh - 32px); margin: auto; border: 1px solid var(--rescom-line); border-radius: 16px; color: var(--rescom-ink); box-shadow: 0 24px 80px #0b1a4730; overflow: auto; }
-.rescom-dialog::backdrop { background: #0b1a4770; }
-.dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 22px 24px 12px; }
-.dialog-header h2 { font-size: 1.0625rem; font-weight: 700; }
-.dialog-header p { font-size: .8125rem; color: var(--rescom-muted); margin-top: 4px; }
-.dialog-body { padding: 12px 24px 24px; font-size: .875rem; }
-.dialog-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; background: #f8fafc; border-top: 1px solid var(--rescom-line); position: sticky; bottom: 0; }
-.dialog-footer > .rescom-button { width: auto; flex: 1; }
-.connection-status { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 20px; font-size: .75rem; color: #52617a; }
-.connection-status > button { display: grid; place-items: center; min-width: 32px; min-height: 32px; border-radius: 8px; }
-.connection-status > .connection-offline-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 9px;
-  border: 1px solid #d4e1f6;
-  background: #f7faff;
-  color: #234f98;
-  font-weight: 650;
-}
-.connection-offline-action:hover { background: #edf4ff; }
-.pending-sync-badge {
-  display: inline-block;
-  margin-inline-start: 6px;
-  padding: 2px 6px;
-  border-radius: 5px;
-  background: #fff6e4;
-  color: #765012;
-  font-size: .6875rem;
-  font-weight: 600;
-}
-.starlink-trigger {
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 42px;
-  height: 42px;
-  border: 1px solid #cad9ef;
-  border-radius: 10px;
-  background: #eef4ff;
-  color: #24487f;
-}
-.starlink-trigger:hover { background: #dceaff; }
-.starlink-trigger[aria-current="page"] { background: #142b50; color: white; border-color: #142b50; }
-.starlink-trigger svg { transform-origin: 48% 62%; animation: starlink-icon-sway 6s ease-in-out infinite; }
-@keyframes starlink-icon-sway {
-  0%, 100% { transform: rotate(-7deg); }
-  50% { transform: rotate(9deg); }
-}
-.connection-online { color: #127a45; }
-.connection-offline { padding: 10px 14px; border: 1px solid #ead4b1; border-radius: 10px; background: #fff9ed; color: #825011; }
-.quick-actions { position: fixed; right: 18px; bottom: 18px; z-index: 25; }
-.quick-actions-toggle { display: flex; align-items: center; gap: 8px; padding: 14px 18px; border-radius: 30px; background: #2563eb; color: white; box-shadow: 0 6px 20px #1d4ed83a; font-size: .875rem; font-weight: 600; }
-.quick-actions-list { display: grid; gap: 6px; padding: 8px; margin-bottom: 10px; background: white; border: 1px solid var(--rescom-line); border-radius: 14px; box-shadow: 0 6px 20px #0b1a4718; }
-.quick-actions-list button { display: flex; align-items: center; gap: 10px; padding: 12px; font-size: .875rem; text-align: left; border-radius: 8px; }
-.quick-actions-list button:hover { background: #eef3ff; }
-.skip-link { position: fixed; left: 16px; top: -100px; padding: 12px 18px; background: white; color: #0b1a47; z-index: 150; border-radius: 8px; }
-.skip-link:focus { top: 10px; }
-@media (max-width: 767px) {
-  .rescom-button { min-height: 44px; }
-  input, textarea, select { font-size: 1rem !important; }
-  .dialog-header { padding: 18px 18px 10px; }
-  .dialog-body { padding: 10px 18px 18px; }
-  .dialog-footer { padding: 14px 18px; }
-  .data-pagination { padding: 12px; }
-  .data-pagination > div { width: 100%; justify-content: center; }
-  aside button { min-height: 44px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-}
-@media (max-width: 639px) {
-  .rescom-evacuees > .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .rescom-evacuee-summary { padding: 14px; }
-  .rescom-evacuee-summary > div > div:last-child { display: none; }
-  .rescom-evacuee-summary p:last-child { display: none; }
-}
-
-/* Centered feedback requested after the MDRRMO UI review. */
-.feedback-dialog { position: fixed; inset: 0; margin: auto; box-sizing: border-box; width: min(360px,calc(100vw - 32px)); min-height: 330px; max-height: calc(100dvh - 32px); padding: 36px 28px 26px; border: 1px solid #dce3ee; border-radius: 20px; text-align: center; color: #0b1a47; box-shadow: 0 24px 80px #0b1a4726; overflow-y: auto; }
-.feedback-dialog::backdrop { background: #0b1a4755; }
-.feedback-close { position: absolute; right: 12px; top: 12px; padding: 10px; color: #52617a; border-radius: 10px; }
-.feedback-icon { display: grid; place-items: center; width: 76px; height: 76px; margin: 0 auto 20px; border-radius: 50%; background: #e3f6ec; color: #127a45; }
-.feedback-bad .feedback-icon { background: #fff0f0; color: #b4232c; }
-.feedback-warn .feedback-icon { background: #fff4df; color: #925609; }
-.feedback-dialog h2 { font-size: 1.25rem; font-weight: 700; line-height: 1.4; }
-.feedback-dialog p { font-size: .9375rem; color: #52617a; line-height: 1.6; margin: 10px 0 22px; overflow-wrap: anywhere; }
-.feedback-done { width: 100%; min-height: 44px; padding: 10px 16px; border-radius: 10px; color: white; background: #2563eb; font-size: .875rem; font-weight: 600; }
-.rescom-dialog { overflow: hidden; }
-.rescom-dialog[open] { display: flex; flex-direction: column; }
-.dialog-header { flex-shrink: 0; border-bottom: 1px solid #edf0f5; padding-bottom: 18px; }
-.dialog-body { min-height: 0; overflow-y: auto; flex: 1 1 auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-.dialog-footer { flex-shrink: 0; position: static; }
-.data-pagination:has(> span:only-child) { background: transparent; border: 0; padding: 0 2px; }

@@ -1,23 +1,17 @@
-> **Current UI update:** centered feedback popups, focused Field Personnel views, collapsed Admin analysis, corrected center-edit permissions and PDF-only reporting. Start with UPDATE_GUIDE.md.
-
-> **PDF-only reporting:** Excel/CSV report options were removed following the MDRRMO interview. See the first section of UPDATE_GUIDE.md for the four replacement files.
-
-> **Updated project:** Start with [UPDATE_GUIDE.md](UPDATE_GUIDE.md) and [REVIEW_REPORT.md](REVIEW_REPORT.md). For an existing database, apply the additive `backend/migrations/004_user_status.sql` migration. The fresh-install `schema.sql` below drops existing tables. Keep your existing environment files.
-
 # RESCOM — Real-time Evacuation Status Coordination and Monitoring
 
 Full-stack implementation matching the Activity 4 relational schema, use case
 diagram, activity diagram, sequence diagrams and class diagram.
 
 - **Backend:** Node.js, Express 5, PostgreSQL (`pg`), Socket.io, JWT auth, bcrypt
-- **Frontend:** React 18 (Vite), Tailwind CSS, responsive shared UI, socket.io-client
+- **Frontend:** React 18 (Vite), Tailwind CSS, glassmorphism UI, socket.io-client
 
 Two roles, matching the use case diagram: **Admin Staff** and **Field Personnel**.
 
 ```
 rescom/
 ├── backend/     Express API + PostgreSQL + Socket.io
-└── frontend/    React (Vite) responsive client
+└── frontend/    React (Vite) glassmorphism client
 ```
 
 ## 1. Database setup

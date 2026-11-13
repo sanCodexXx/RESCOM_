@@ -1,5 +1,3 @@
-import { usePagination } from '../hooks/usePagination.js';
-import { Pagination, Skeleton, LoadError, EmptyState as SharedEmptyState } from '../components/ui/DataStates.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, Edit2, Trash2, X, Check, ShieldCheck, Users as UsersIcon, UserCheck, AlertTriangle, ChevronDown } from 'lucide-react';
 import { PageHeader } from '../components/layout/Shell.jsx';
@@ -38,7 +36,7 @@ function timeAgo(ts) {
 
 function Avatar({ user, size = 40 }) {
   return (
-    <span style={{ width: size, height: size }} className="rounded-full grid place-items-center shrink-0 text-white text-[0.78125rem] font-bold bg-gradient-to-br from-[#5b7bc2] to-[#2f4a91]">
+    <span style={{ width: size, height: size }} className="rounded-full grid place-items-center shrink-0 text-white text-[12.5px] font-bold bg-gradient-to-br from-[#5b7bc2] to-[#2f4a91]">
       {initials(user)}
     </span>
   );
@@ -55,9 +53,9 @@ function MiniStat({ icon, label, value, hint, tint }) {
     <div className="bg-white rounded-2xl shadow-glass-sm p-5 flex gap-4 items-start">
       <span className={`w-11 h-11 rounded-xl grid place-items-center shrink-0 ${tints.tile}`}>{icon}</span>
       <div className="min-w-0">
-        <div className={`text-[0.8125rem] font-semibold ${tints.label}`}>{label}</div>
-        <div className="text-[1.625rem] font-bold leading-tight text-navy-900">{value}</div>
-        <div className="text-[0.75rem] text-navy-900/50">{hint}</div>
+        <div className={`text-[13px] font-semibold ${tints.label}`}>{label}</div>
+        <div className="text-[26px] font-bold leading-tight text-navy-900">{value}</div>
+        <div className="text-[12px] text-navy-900/50">{hint}</div>
       </div>
     </div>
   );
@@ -77,14 +75,12 @@ export default function Users() {
   const { toast, openModal, closeModal, openConfirm } = useUi();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('All');
 
   async function load() {
-    setLoadError('');
     try { setUsers(await api.get('/users')); }
-    catch (e) { setLoadError(e.message); toast(e.message, 'bad'); }
+    catch (e) { toast(e.message, 'bad'); }
     finally { setLoading(false); }
   }
 
@@ -111,14 +107,12 @@ export default function Users() {
     );
   }, [users, q, filter]);
 
-  const pager = usePagination(shown, JSON.stringify([q, filter]));
-
   if (me?.role !== 'ADMIN_STAFF') {
     return (
       <div className="glass rounded-glass shadow-glass-sm p-10 text-center">
         <ShieldCheck size={28} className="mx-auto text-navy-900/35 mb-3" />
         <b className="text-navy-900 block mb-1">Admin Staff only</b>
-        <p className="text-navy-900/45 text-[0.78125rem]">User management is restricted to Admin Staff accounts.</p>
+        <p className="text-navy-900/45 text-[12.5px]">User management is restricted to Admin Staff accounts.</p>
       </div>
     );
   }
@@ -158,7 +152,7 @@ export default function Users() {
         ? `<b>${fullName(u)}</b>'s sign-up request will be rejected and removed.`
         : `<b>${fullName(u)}</b> will lose access to RESCOM immediately.`,
       onConfirm: async () => {
-        try { await api.del(`/users/${u.user_id}`); toast(pending ? 'Registration rejected' : 'User deleted', 'ok'); load(); }
+        try { await api.del(`/users/${u.user_id}`); toast(pending ? 'Registration rejected' : 'User deleted', 'bad'); load(); }
         catch (e) { toast(e.message, 'bad'); }
       }
     });
@@ -178,11 +172,11 @@ export default function Users() {
           <div className="flex items-center gap-3 mb-5">
             <Avatar user={u} size={52} />
             <div className="min-w-0">
-              <b className="block text-[1rem] text-navy-900">{fullName(u)}</b>
+              <b className="block text-[16px] text-navy-900">{fullName(u)}</b>
               <Badge className={STATUS_STYLE[u.status]}>{u.status}</Badge>
             </div>
           </div>
-          <dl className="grid grid-cols-[120px_1fr] gap-y-3 text-[0.8125rem]">
+          <dl className="grid grid-cols-[120px_1fr] gap-y-3 text-[13px]">
             {rows.map(([k, v]) => (
               <React.Fragment key={k}>
                 <dt className="text-navy-900/50">{k}</dt>
@@ -242,8 +236,6 @@ export default function Users() {
 
   return (
     <>
-      {loading && <Skeleton label="Loading users" />}
-      <LoadError message={loadError} onRetry={load} />
       <PageHeader title="Users Management" subtitle="System accounts, roles and permissions"
         actions={<>
           <Button variant="ghost" onClick={exportCsv} disabled={!shown.length}><Download size={14} />Export</Button>
@@ -262,11 +254,11 @@ export default function Users() {
           <div className="flex items-center gap-2 rounded-xl border border-navy-900/15 px-3 w-full sm:w-[290px] focus-within:border-accent-500/70 focus-within:ring-2 focus-within:ring-accent-400/25 transition">
             <Search size={15} className="text-navy-900/40 shrink-0" />
             <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, email, username"
-              className="flex-1 min-w-0 border-0 outline-none bg-transparent py-2.5 text-[0.8125rem] text-navy-900" />
+              className="flex-1 min-w-0 border-0 outline-none bg-transparent py-2.5 text-[13px] text-navy-900" />
           </div>
           <div className="relative">
             <select value={filter} onChange={e => setFilter(e.target.value)} aria-label="Filter by status"
-              className="appearance-none rounded-xl border border-navy-900/15 bg-white pl-3 pr-9 py-2.5 text-[0.8125rem] font-semibold text-navy-900 outline-none cursor-pointer focus:border-accent-500/70">
+              className="appearance-none rounded-xl border border-navy-900/15 bg-white pl-3 pr-9 py-2.5 text-[13px] font-semibold text-navy-900 outline-none cursor-pointer focus:border-accent-500/70">
               <option value="All">All</option>
               <option value="Active">Active</option>
               <option value="Pending">Pending</option>
@@ -274,7 +266,7 @@ export default function Users() {
             </select>
             <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-navy-900/50 pointer-events-none" />
           </div>
-          <span className="ml-auto text-[0.78125rem] text-navy-900/50">{shown.length} user{shown.length === 1 ? '' : 's'}</span>
+          <span className="ml-auto text-[12.5px] text-navy-900/50">{shown.length} user{shown.length === 1 ? '' : 's'}</span>
         </div>
 
         <div className="overflow-x-auto scroll-thin">
@@ -282,12 +274,12 @@ export default function Users() {
             <thead>
               <tr className="bg-navy-900/[0.04]">
                 {['User', 'Username', 'Role', 'Unit / Barangay', 'Last Active', 'Status', 'Actions'].map((h, i, a) => (
-                  <th key={h} className={`text-left text-[0.71875rem] uppercase tracking-wider text-navy-900/55 font-semibold px-4 py-3.5 ${i === 0 ? 'rounded-l-xl' : ''} ${i === a.length - 1 ? 'rounded-r-xl' : ''}`}>{h}</th>
+                  <th key={h} className={`text-left text-[11.5px] uppercase tracking-wider text-navy-900/55 font-semibold px-4 py-3.5 ${i === 0 ? 'rounded-l-xl' : ''} ${i === a.length - 1 ? 'rounded-r-xl' : ''}`}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {pager.items.map(u => {
+              {shown.map(u => {
                 const self = u.user_id === me.user_id;
                 return (
                   <tr key={u.user_id} className="border-b border-navy-900/8 last:border-0">
@@ -295,15 +287,15 @@ export default function Users() {
                       <div className="flex items-center gap-3">
                         <Avatar user={u} />
                         <div className="min-w-0">
-                          <b className="block text-[0.84375rem] text-navy-900">{fullName(u)}{self && <span className="ml-1.5 text-[0.65625rem] font-semibold text-navy-900/40">(you)</span>}</b>
-                          <span className="block text-[0.75rem] text-navy-900/55">{u.email}</span>
+                          <b className="block text-[13.5px] text-navy-900">{fullName(u)}{self && <span className="ml-1.5 text-[10.5px] font-semibold text-navy-900/40">(you)</span>}</b>
+                          <span className="block text-[12px] text-navy-900/55">{u.email}</span>
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 text-[0.8125rem] text-navy-900/75">{u.username}</td>
+                    <td className="px-4 py-3.5 text-[13px] text-navy-900/75">{u.username}</td>
                     <td className="px-4 py-3.5"><Badge className={STATUS_PILL[u.role]}>{ROLE_LABEL[u.role]}</Badge></td>
-                    <td className="px-4 py-3.5 text-[0.8125rem] text-navy-900/75">{u.unit || '—'}</td>
-                    <td className="px-4 py-3.5 text-[0.8125rem] text-navy-900/75 whitespace-nowrap">{timeAgo(u.last_active_at)}</td>
+                    <td className="px-4 py-3.5 text-[13px] text-navy-900/75">{u.unit || '—'}</td>
+                    <td className="px-4 py-3.5 text-[13px] text-navy-900/75 whitespace-nowrap">{timeAgo(u.last_active_at)}</td>
                     <td className="px-4 py-3.5"><Badge className={STATUS_STYLE[u.status]}>{u.status}</Badge></td>
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-1">
@@ -321,9 +313,8 @@ export default function Users() {
             </tbody>
           </table>
         </div>
-        {!loading && !loadError && !shown.length && <SharedEmptyState title="No matching users" message="Try another name or clear the status filter." action="Clear filters" onAction={() => { setQ(''); setFilter('All'); }} />}
+        {!loading && !shown.length && <p className="text-navy-900/45 text-[12.5px] text-center py-8">No users found.</p>}
       </div>
-      {!loading && <Pagination pager={pager} />}
     </>
   );
 }

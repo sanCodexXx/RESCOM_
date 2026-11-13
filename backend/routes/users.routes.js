@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { verifyToken, requireRole } = require('../middleware/auth');
-const { emit, disconnectUser } = require('../utils/notify');
+const { emit } = require('../utils/notify');
 const { normalizePhPhone } = require('../utils/barangays');
 
 const router = express.Router();
@@ -96,7 +96,6 @@ router.put('/:id', requireRole('ADMIN_STAFF'), h(async (req, res) => {
       [first_name, last_name, email, role, unit, cleanPhone, hash, id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'User not found' });
-    disconnectUser(id);
     emit('user_updated', rows[0]);
     res.json(rows[0]);
   } catch (e) {
@@ -124,7 +123,6 @@ router.patch('/:id/status', requireRole('ADMIN_STAFF'), h(async (req, res) => {
   }
 
   const { rows } = await db.query(`UPDATE USERS SET status = $1 WHERE user_id = $2 RETURNING ${COLS}`, [status, id]);
-  disconnectUser(id);
   emit('user_updated', rows[0]);
   res.json(rows[0]);
 }));
@@ -141,7 +139,6 @@ router.delete('/:id', requireRole('ADMIN_STAFF'), h(async (req, res) => {
   }
 
   await db.query('DELETE FROM USERS WHERE user_id = $1', [id]);
-  disconnectUser(id);
   emit('user_updated', { user_id: id, deleted: true });
   res.json({ message: 'User deleted' });
 }));

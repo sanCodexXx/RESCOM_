@@ -8,7 +8,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { Server } = require('socket.io');
-const { socketAuth } = require('./middleware/socketAuth');
+const jwt = require('jsonwebtoken');
 const { setIo } = require('./utils/notify');
 
 const authRoutes = require('./routes/auth.routes');
@@ -20,7 +20,6 @@ const incidentsRoutes = require('./routes/incidents.routes');
 const dromicRoutes = require('./routes/dromic.routes');
 const analyticsRoutes = require('./routes/analytics.routes');
 const notificationsRoutes = require('./routes/notifications.routes');
-const starlinkRoutes = require('./routes/starlink.routes');
 
 // Production JWT security check
 if (
@@ -73,7 +72,7 @@ app.use(
 app.use(cors({
   origin: corsOrigin,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-RESCOM-Owner', 'X-RESCOM-Captured-At']
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // JSON body parser
@@ -129,7 +128,6 @@ app.use('/api/incidents', incidentsRoutes);
 app.use('/api/dromic', dromicRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/notifications', notificationsRoutes);
-app.use('/api/starlink', starlinkRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -148,18 +146,32 @@ app.use((err, req, res, next) => {
 });
 
 // Socket.IO JWT authentication
-io.use(socketAuth);
+io.use((socket, next) => {
+  try {
+    const token =
+      socket.handshake.auth &&
+      socket.handshake.auth.token;
+
+    if (!token) {
+      return next(new Error('unauthorized'));
+    }
+
+    socket.data.user = jwt.verify(
+      token,
+      process.env.JWT_SECRET
+    );
+
+    next();
+  } catch (err) {
+    next(new Error('unauthorized'));
+  }
+});
 
 // Socket.IO connections
 io.on('connection', socket => {
   const { user_id, role } = socket.data.user;
 
   socket.join(`role:${role}`);
-  socket.join(`user:${user_id}`);
-  const expiresIn = socket.data.user.exp * 1000 - Date.now();
-  const expiryTimer = Number.isFinite(expiresIn)
-    ? setTimeout(() => socket.disconnect(true), Math.max(0, Math.min(expiresIn, 2147483647)))
-    : null;
 
   console.log(
     'Client connected:',
@@ -190,7 +202,6 @@ io.on('connection', socket => {
   });
 
   socket.on('disconnect', () => {
-    if (expiryTimer) clearTimeout(expiryTimer);
     console.log('Client disconnected:', socket.id);
   });
 });

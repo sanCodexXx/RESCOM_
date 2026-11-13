@@ -1,6 +1,3 @@
-import { useAuth } from '../context/AuthContext.jsx';
-import { getSocket } from '../lib/socket.js';
-import { LoadError, Skeleton } from '../components/ui/DataStates.jsx';
 import React, { useCallback, useEffect, useState } from 'react';
 
 import {
@@ -11,9 +8,11 @@ import {
   RefreshCw,
   ArrowUpRight,
   MapPin,
+  Clock3,
   Activity,
   CheckCircle2,
   CircleAlert,
+  CalendarDays,
 } from 'lucide-react';
 
 import {
@@ -42,11 +41,11 @@ import Badge, {
   SEV_PILL,
 } from '../components/ui/Badge.jsx';
 
+import WeatherCard from '../components/ui/WeatherCard.jsx';
 
 import Button from '../components/ui/Button.jsx';
 
 import { api } from '../lib/api.js';
-import { useSyncRefresh } from '../lib/useSyncRefresh.js';
 
 import { useUi } from '../context/UiContext.jsx';
 
@@ -96,6 +95,24 @@ function getOccupancyStatus(percentage) {
   if (percentage >= 70) return 'High Occupancy';
 
   return 'Available';
+}
+
+
+function formatDate(value) {
+  if (!value) return 'Date unavailable';
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return 'Date unavailable';
+  }
+
+  return date.toLocaleDateString('en-PH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'Asia/Manila',
+  });
 }
 
 
@@ -154,12 +171,12 @@ function DashboardSection({
     >
       <div className="flex items-start justify-between gap-3 p-5 pb-4">
         <div className="min-w-0">
-          <h2 className="text-[0.9375rem] font-bold text-navy-900">
+          <h2 className="text-[15px] font-bold text-navy-900">
             {title}
           </h2>
 
           {description && (
-            <p className="text-[0.75rem] text-navy-900/50 mt-1">
+            <p className="text-[12px] text-navy-900/50 mt-1">
               {description}
             </p>
           )}
@@ -191,11 +208,11 @@ function EmptyState({
         {icon}
       </div>
 
-      <h3 className="text-[0.8125rem] font-semibold text-navy-900">
+      <h3 className="text-[13px] font-semibold text-navy-900">
         {title}
       </h3>
 
-      <p className="text-[0.75rem] text-navy-900/50 mt-1 max-w-[260px]">
+      <p className="text-[12px] text-navy-900/50 mt-1 max-w-[260px]">
         {description}
       </p>
     </div>
@@ -208,8 +225,6 @@ function EmptyState({
 ===================================================== */
 
 export default function Dashboard({ onNav }) {
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'ADMIN_STAFF';
   const { toast } = useUi();
 
   const [stats, setStats] = useState({
@@ -223,7 +238,7 @@ export default function Dashboard({ onNav }) {
   const [evacuees, setEvacuees] = useState([]);
 
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const navigate = useCallback(
     (page) => {
@@ -239,8 +254,8 @@ export default function Dashboard({ onNav }) {
      LOAD DASHBOARD DATA
   ===================================================== */
 
-  const load = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true); setLoadError('');
+  const load = useCallback(async () => {
+    setLoading(true);
 
     try {
       const [
@@ -251,8 +266,8 @@ export default function Dashboard({ onNav }) {
       ] = await Promise.all([
         api.get('/evacuees/stats'),
         api.get('/centers'),
-        isAdmin ? api.get('/incidents') : Promise.resolve([]),
-        isAdmin ? api.get('/evacuees') : Promise.resolve([]),
+        api.get('/incidents'),
+        api.get('/evacuees'),
       ]);
 
       setStats(statsResponse || {
@@ -278,8 +293,9 @@ export default function Dashboard({ onNav }) {
           ? evacueesResponse
           : []
       );
+
+      setLastUpdated(new Date());
     } catch (error) {
-      setLoadError(error.message || 'Unable to load dashboard.');
       toast(
         error?.message || 'Unable to load dashboard data.',
         'bad'
@@ -287,20 +303,11 @@ export default function Dashboard({ onNav }) {
     } finally {
       setLoading(false);
     }
-  }, [toast, isAdmin]);
+  }, [toast]);
 
-
-  useSyncRefresh(() => load(false));
 
   useEffect(() => {
     load();
-    const socket = getSocket();
-    let timer;
-    const refresh = () => { clearTimeout(timer); timer = setTimeout(() => load(false), 250); };
-    const events = ['connect', 'center_updated', 'evacuee_registered', 'priority_case_flagged', 'new_incident_dispatched', 'incident_status_changed'];
-    events.forEach(event => socket.on(event, refresh));
-
-  return () => { clearTimeout(timer); events.forEach(event => socket.off(event, refresh)); };
   }, [load]);
 
 
@@ -409,41 +416,65 @@ export default function Dashboard({ onNav }) {
      HEADER
   ===================================================== */
 
-  if (!isAdmin) return <div className="space-y-5">
-    <LoadError message={loadError} onRetry={load} />
-    <PageHeader title="Field workspace" subtitle="Register evacuees, review centers and share PDF reports."
-      actions={<Button size="sm" variant="ghost" disabled={loading} onClick={load}><RefreshCw size={14} />Refresh</Button>} />
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <StatCard icon={<Users size={19} />} label="Evacuees present" value={loading ? '—' : formatNumber(stats.currentlyPresent)} onClick={() => navigate('evacuees')} />
-      <StatCard icon={<Building2 size={19} />} label="Spaces available" value={loading ? '—' : formatNumber(availableCapacity)} onClick={() => navigate('centers')} />
-      <StatCard icon={<ShieldAlert size={19} />} label="Priority cases" value={loading ? '—' : formatNumber(stats.totalPriorityCases)} onClick={() => navigate('priority')} />
-    </div>
-    <section className="glass rounded-glass p-5">
-      <h2 className="font-semibold mb-4">Daily tasks</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Button onClick={() => onNav('evacuees', { quickAction: 'register' })}>Register evacuee</Button>
-        <Button variant="ghost" onClick={() => navigate('centers')}>View evacuation centers</Button>
-        <Button variant="ghost" onClick={() => navigate('priority')}>Review priority cases</Button>
-        <Button variant="ghost" onClick={() => navigate('dromic')}>Open PDF reports</Button>
-      </div>
-    </section>
-  </div>;
-
-
   return (
     <div className="rescom-dashboard space-y-5">
 
-      <LoadError message={loadError} onRetry={load} />
       <PageHeader
-        title="Overview"
-        subtitle="Evacuation operations in San Nicolas, Ilocos Norte."
-        actions={
-          <Button size="sm" variant="ghost" disabled={loading} onClick={load} aria-label="Refresh dashboard">
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+        title="Disaster Response Dashboard"
+        subtitle="Monitor evacuation operations and disaster incidents across San Nicolas, Ilocos Norte."
+      />
+
+
+      {/* =================================================
+          DASHBOARD TOOLBAR
+      ================================================= */}
+
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+
+        <div className="flex items-center gap-2 text-[12px] text-navy-900/50">
+          <CalendarDays size={15} />
+
+          <span>
+            {new Date().toLocaleDateString('en-PH', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+              timeZone: 'Asia/Manila',
+            })}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-3">
+
+          {lastUpdated && (
+            <span className="text-[11px] text-navy-900/45">
+              Updated {lastUpdated.toLocaleTimeString('en-PH', {
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone: 'Asia/Manila',
+              })}
+            </span>
+          )}
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={load}
+            disabled={loading}
+            aria-label="Refresh dashboard"
+          >
+            <RefreshCw
+              size={14}
+              className={loading ? 'animate-spin' : ''}
+            />
+
             Refresh
           </Button>
-        }
-      />
+
+        </div>
+      </div>
+
 
       {/* =================================================
           KEY STATISTICS
@@ -491,6 +522,13 @@ export default function Dashboard({ onNav }) {
 
 
       {/* =================================================
+          WEATHER
+      ================================================= */}
+
+      <WeatherCard />
+
+
+      {/* =================================================
           CAPACITY OVERVIEW
       ================================================= */}
 
@@ -504,12 +542,12 @@ export default function Dashboard({ onNav }) {
                 <Building2 size={18} />
               </div>
 
-              <h2 className="text-[0.9375rem] font-bold text-navy-900">
+              <h2 className="text-[15px] font-bold text-navy-900">
                 Evacuation Capacity Overview
               </h2>
             </div>
 
-            <p className="text-[0.75rem] text-navy-900/50 mt-2">
+            <p className="text-[12px] text-navy-900/50 mt-2">
               Current occupancy across registered evacuation centers.
             </p>
           </div>
@@ -530,45 +568,45 @@ export default function Dashboard({ onNav }) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
 
           <div className="rounded-xl border border-navy-900/8 bg-white p-4">
-            <p className="text-[0.6875rem] font-medium text-navy-900/50">
+            <p className="text-[11px] font-medium text-navy-900/50">
               Total Capacity
             </p>
 
-            <p className="text-[1.5625rem] font-bold text-navy-900 mt-1">
+            <p className="text-[25px] font-bold text-navy-900 mt-1">
               {loading ? '—' : formatNumber(totalCapacity)}
             </p>
 
-            <p className="text-[0.6875rem] text-navy-900/45 mt-1">
+            <p className="text-[11px] text-navy-900/45 mt-1">
               Registered spaces
             </p>
           </div>
 
 
           <div className="rounded-xl border border-navy-900/8 bg-white p-4">
-            <p className="text-[0.6875rem] font-medium text-navy-900/50">
+            <p className="text-[11px] font-medium text-navy-900/50">
               Current Occupancy
             </p>
 
-            <p className="text-[1.5625rem] font-bold text-navy-900 mt-1">
+            <p className="text-[25px] font-bold text-navy-900 mt-1">
               {loading ? '—' : formatNumber(totalOccupancy)}
             </p>
 
-            <p className="text-[0.6875rem] text-navy-900/45 mt-1">
+            <p className="text-[11px] text-navy-900/45 mt-1">
               People recorded in centers
             </p>
           </div>
 
 
           <div className="rounded-xl border border-navy-900/8 bg-white p-4">
-            <p className="text-[0.6875rem] font-medium text-navy-900/50">
+            <p className="text-[11px] font-medium text-navy-900/50">
               Available Spaces
             </p>
 
-            <p className="text-[1.5625rem] font-bold text-success mt-1">
+            <p className="text-[25px] font-bold text-success mt-1">
               {loading ? '—' : formatNumber(availableCapacity)}
             </p>
 
-            <p className="text-[0.6875rem] text-navy-900/45 mt-1">
+            <p className="text-[11px] text-navy-900/45 mt-1">
               Based on recorded capacity
             </p>
           </div>
@@ -578,11 +616,11 @@ export default function Dashboard({ onNav }) {
 
         <div className="flex items-center justify-between gap-3 mb-2">
 
-          <span className="text-[0.75rem] font-semibold text-navy-900">
+          <span className="text-[12px] font-semibold text-navy-900">
             Overall occupancy
           </span>
 
-          <span className="text-[0.75rem] font-bold text-navy-900">
+          <span className="text-[12px] font-bold text-navy-900">
             {loading ? '—' : `${overallOccupancy}%`}
           </span>
 
@@ -594,7 +632,7 @@ export default function Dashboard({ onNav }) {
           label="Overall evacuation center occupancy"
         />
 
-        <p className="text-[0.6875rem] text-navy-900/45 mt-2">
+        <p className="text-[11px] text-navy-900/45 mt-2">
           Calculated from the registered center capacities and occupancy values.
         </p>
 
@@ -605,7 +643,6 @@ export default function Dashboard({ onNav }) {
           CHARTS
       ================================================= */}
 
-      <details className="glass rounded-glass p-5"><summary className="cursor-pointer font-semibold">Detailed charts</summary><div className="space-y-5 mt-5">
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
 
         {/* CENTER OCCUPANCY CHART */}
@@ -621,7 +658,9 @@ export default function Dashboard({ onNav }) {
         >
 
           {loading ? (
-            <Skeleton label="Loading occupancy data" rows={3} />
+            <div className="py-12 text-center text-[12px] text-navy-900/45">
+              Loading occupancy data...
+            </div>
           ) : occupancyChart.length > 0 ? (
 
             <ResponsiveContainer width="100%" height={270}>
@@ -723,7 +762,9 @@ export default function Dashboard({ onNav }) {
         >
 
           {loading ? (
-            <Skeleton label="Loading incident data" rows={3} />
+            <div className="py-12 text-center text-[12px] text-navy-900/45">
+              Loading incident data...
+            </div>
           ) : severityCounts.length > 0 ? (
 
             <ResponsiveContainer width="100%" height={270}>
@@ -805,7 +846,9 @@ export default function Dashboard({ onNav }) {
 
         {loading ? (
 
-          <Skeleton label="Loading priority data" rows={3} />
+          <div className="py-12 text-center text-[12px] text-navy-900/45">
+            Loading priority data...
+          </div>
 
         ) : priorityChart.length > 0 ? (
 
@@ -900,8 +943,6 @@ export default function Dashboard({ onNav }) {
           BOTTOM SECTION
       ================================================= */}
 
-      </div></details>
-
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
 
         {/* EVACUATION CENTER STATUS */}
@@ -924,7 +965,7 @@ export default function Dashboard({ onNav }) {
 
           {loading ? (
 
-            <div className="py-8 text-center text-[0.75rem] text-navy-900/45">
+            <div className="py-8 text-center text-[12px] text-navy-900/45">
               Loading centers...
             </div>
 
@@ -970,11 +1011,11 @@ export default function Dashboard({ onNav }) {
 
                         <div className="min-w-0">
 
-                          <h3 className="text-[0.78125rem] font-bold text-navy-900 truncate">
+                          <h3 className="text-[12.5px] font-bold text-navy-900 truncate">
                             {center.center_name || 'Unnamed Center'}
                           </h3>
 
-                          <p className="text-[0.6875rem] text-navy-900/45 mt-1 flex items-center gap-1">
+                          <p className="text-[11px] text-navy-900/45 mt-1 flex items-center gap-1">
                             <MapPin size={11} />
 
                             {center.brgy || center.barangay || 'Location not specified'}
@@ -986,7 +1027,7 @@ export default function Dashboard({ onNav }) {
 
                       <span
                         className={`
-                          text-[0.625rem]
+                          text-[10px]
                           font-semibold
                           px-2
                           py-1
@@ -1007,7 +1048,7 @@ export default function Dashboard({ onNav }) {
                     </div>
 
 
-                    <div className="flex justify-between items-center text-[0.6875rem] mb-2">
+                    <div className="flex justify-between items-center text-[11px] mb-2">
 
                       <span className="text-navy-900/55">
                         Occupancy
@@ -1033,11 +1074,11 @@ export default function Dashboard({ onNav }) {
 
                     <div className="flex justify-between mt-2">
 
-                      <span className="text-[0.625rem] text-navy-900/45">
+                      <span className="text-[10px] text-navy-900/45">
                         Available spaces
                       </span>
 
-                      <span className="text-[0.6875rem] font-semibold text-navy-900">
+                      <span className="text-[11px] font-semibold text-navy-900">
                         {formatNumber(occupancy.available)}
                       </span>
 
@@ -1083,7 +1124,7 @@ export default function Dashboard({ onNav }) {
 
           {loading ? (
 
-            <div className="py-8 text-center text-[0.75rem] text-navy-900/45">
+            <div className="py-8 text-center text-[12px] text-navy-900/45">
               Loading incidents...
             </div>
 
@@ -1144,17 +1185,24 @@ export default function Dashboard({ onNav }) {
 
                     <div className="flex-1 min-w-0">
 
-                      <h3 className="text-[0.78125rem] font-semibold text-navy-900 truncate">
+                      <h3 className="text-[12.5px] font-semibold text-navy-900 truncate">
                         {incident.disaster_name || 'Unnamed Incident'}
                       </h3>
 
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
 
-                        <span className="text-[0.6875rem] text-navy-900/50 flex items-center gap-1">
+                        <span className="text-[11px] text-navy-900/50 flex items-center gap-1">
                           <MapPin size={11} />
 
                           {incident.brgy || 'Location unavailable'}
                         </span>
+
+                        <span className="text-[11px] text-navy-900/45 flex items-center gap-1">
+                          <Clock3 size={11} />
+
+                          {formatDate(incident.date_started)}
+                        </span>
+
                       </div>
 
 
@@ -1208,7 +1256,7 @@ export default function Dashboard({ onNav }) {
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-1 pb-2">
 
-          <div className="flex items-center gap-2 text-[0.6875rem] text-navy-900/45">
+          <div className="flex items-center gap-2 text-[11px] text-navy-900/45">
 
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
 
@@ -1216,7 +1264,7 @@ export default function Dashboard({ onNav }) {
 
           </div>
 
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[0.6875rem] text-navy-900/45">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-navy-900/45">
 
             <span>
               Total incidents: {formatNumber(incidents.length)}

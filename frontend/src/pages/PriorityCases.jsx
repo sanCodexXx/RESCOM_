@@ -1,6 +1,3 @@
-import { useAuth } from '../context/AuthContext.jsx';
-import { usePagination } from '../hooks/usePagination.js';
-import { Pagination, Skeleton, LoadError, EmptyState as SharedEmptyState } from '../components/ui/DataStates.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
@@ -21,8 +18,7 @@ import {
 import { PageHeader } from '../components/layout/Shell.jsx';
 import Badge, { STATUS_PILL } from '../components/ui/Badge.jsx';
 import Button from '../components/ui/Button.jsx';
-import { api, savedMessage } from '../lib/api.js';
-import { useSyncRefresh } from '../lib/useSyncRefresh.js';
+import { api } from '../lib/api.js';
 import { useUi } from '../context/UiContext.jsx';
 import { getSocket } from '../lib/socket.js';
 
@@ -93,33 +89,26 @@ function EmptyState({ hasFilters, onReset }) {
 }
 
 export default function PriorityCases() {
-  const { user: currentUser } = useAuth();
-  const isAdmin = currentUser?.role === 'ADMIN_STAFF';
   const { toast, openConfirm } = useUi();
 
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Statuses');
   const [caseTypeFilter, setCaseTypeFilter] = useState('All Case Types');
 
   async function load(showLoading = true) {
-    setLoadError('');
     if (showLoading) setLoading(true);
 
     try {
       const result = await api.get('/priority-cases');
       setCases(Array.isArray(result) ? result : []);
     } catch (error) {
-      setLoadError(error.message || 'Unable to load records.');
       toast(error.message || 'Failed to load priority cases.', 'bad');
     } finally {
       setLoading(false);
     }
   }
-
-  useSyncRefresh(() => load(false));
 
   useEffect(() => {
     load();
@@ -206,12 +195,12 @@ export default function PriorityCases() {
 
   async function setStatus(priorityCase, status) {
     try {
-      const result = await api.patch(
+      await api.patch(
         `/priority-cases/${priorityCase.priority_id}/status`,
         { priority_status: status }
       );
 
-      toast(savedMessage(result, 'Priority case status updated successfully.'), 'ok');
+      toast('Priority case status updated successfully.', 'ok');
       await load(false);
     } catch (error) {
       toast(error.message || 'Unable to update priority case status.', 'bad');
@@ -238,11 +227,8 @@ export default function PriorityCases() {
     });
   }
 
-  const pager = usePagination(filteredCases, JSON.stringify([search, statusFilter, caseTypeFilter]));
-
   return (
     <>
-      <LoadError message={loadError} onRetry={load} />
       <PageHeader
         title="Priority Cases"
         subtitle="Monitor vulnerable evacuees and coordinate special assistance."
@@ -418,8 +404,11 @@ export default function PriorityCases() {
           </div>
 
           {loading ? (
-            <Skeleton label="Loading priority cases" />
-          ) : loadError && !cases.length ? null : filteredCases.length === 0 ? (
+            <div className="flex items-center justify-center gap-3 px-5 py-16 text-sm text-slate-500">
+              <RefreshCw size={18} className="animate-spin" />
+              Loading priority cases...
+            </div>
+          ) : filteredCases.length === 0 ? (
             <EmptyState
               hasFilters={
                 Boolean(search) ||
@@ -462,7 +451,7 @@ export default function PriorityCases() {
                   </thead>
 
                   <tbody className="divide-y divide-slate-100">
-                    {pager.items.map((item) => (
+                    {filteredCases.map((item) => (
                       <tr
                         key={item.priority_id}
                         className="transition hover:bg-slate-50/70"
@@ -476,7 +465,6 @@ export default function PriorityCases() {
                             <div>
                               <p className="text-sm font-semibold text-slate-800">
                                 {item.first_name} {item.last_name}
-                                {item.pending_sync && <span className="pending-sync-badge">Pending sync</span>}
                               </p>
 
                               <p className="mt-1 text-xs text-slate-500">
@@ -534,7 +522,7 @@ export default function PriorityCases() {
                               </Button>
                             )}
 
-                            {isAdmin && <Button
+                            <Button
                               type="button"
                               size="sm"
                               variant="danger"
@@ -542,7 +530,7 @@ export default function PriorityCases() {
                               aria-label={`Remove priority flag for ${item.first_name} ${item.last_name}`}
                             >
                               <Trash2 size={14} />
-                            </Button>}
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -553,7 +541,7 @@ export default function PriorityCases() {
 
               {/* Mobile and tablet cards */}
               <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:hidden">
-                {pager.items.map((item) => (
+                {filteredCases.map((item) => (
                   <article
                     key={item.priority_id}
                     className="rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300"
@@ -567,7 +555,6 @@ export default function PriorityCases() {
                         <div className="min-w-0">
                           <h3 className="truncate text-sm font-semibold text-slate-900">
                             {item.first_name} {item.last_name}
-                                {item.pending_sync && <span className="pending-sync-badge">Pending sync</span>}
                           </h3>
 
                           <p className="mt-1 truncate text-xs text-slate-500">
@@ -619,7 +606,7 @@ export default function PriorityCases() {
                         </Button>
                       )}
 
-                      {isAdmin && <Button
+                      <Button
                         type="button"
                         size="sm"
                         variant="danger"
@@ -627,7 +614,7 @@ export default function PriorityCases() {
                         aria-label={`Remove priority flag for ${item.first_name} ${item.last_name}`}
                       >
                         <Trash2 size={14} />
-                      </Button>}
+                      </Button>
                     </div>
                   </article>
                 ))}
@@ -656,7 +643,6 @@ export default function PriorityCases() {
           </div>
         </div>
       </div>
-      {!loading && <Pagination pager={pager} />}
     </>
   );
 }

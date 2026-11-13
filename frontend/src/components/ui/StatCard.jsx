@@ -58,16 +58,16 @@ export function StatCard({
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="text-[0.75rem] font-semibold text-navy-900/60">
+        <div className="text-[12px] font-semibold text-navy-900/60">
           {label}
         </div>
 
-        <div className="text-[1.5625rem] font-bold leading-tight text-navy-900">
+        <div className="text-[25px] font-bold leading-tight text-navy-900">
           {value}
         </div>
 
         {hint && (
-          <div className="text-[0.71875rem] text-navy-900/45 mt-1">
+          <div className="text-[11.5px] text-navy-900/45 mt-1">
             {hint}
           </div>
         )}

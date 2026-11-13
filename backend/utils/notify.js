@@ -51,8 +51,4 @@ async function notify(title, message, { type = 'info', role = null } = {}) {
   }
 }
 
-function disconnectUser(userId) {
-  if (io) io.in(`user:${userId}`).disconnectSockets(true);
-}
-
-module.exports = { disconnectUser, setIo, emit, emitToRole, notify };
+module.exports = { setIo, emit, emitToRole, notify };

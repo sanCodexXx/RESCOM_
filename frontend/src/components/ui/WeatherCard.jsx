@@ -26,30 +26,29 @@ export default function WeatherCard() {
     <div className="glass rounded-glass shadow-glass-sm p-5 mb-4">
       <div className="flex justify-between items-center mb-3">
         <div>
-          <h3 className="font-bold text-[0.9375rem] text-navy-900 m-0">Weather · San Nicolas</h3>
-          <p className="text-[0.75rem] text-navy-900/55 mt-0.5">{fmtLong(w?.current?.time ? w.current.time + '+08:00' : Date.now())}{w?.current?.time && <> · Updated {fmtTime(w.current.time + '+08:00')}</>}</p>
+          <h3 className="font-bold text-[15px] text-navy-900 m-0">Weather · San Nicolas</h3>
+          <p className="text-[12px] text-navy-900/55 mt-0.5">{fmtLong(w?.current?.time ? w.current.time + '+08:00' : Date.now())}{w?.current?.time && <> · Updated {fmtTime(w.current.time + '+08:00')}</>}</p>
         </div>
         <button onClick={load} aria-label="Refresh weather" className="text-navy-900/50 hover:bg-navy-900/8 rounded-lg p-1.5"><RefreshCw size={14} /></button>
       </div>
-      <p className="text-xs text-slate-500 mb-3">Forecast information only. Check official bulletins for warnings.</p>
-      {err && <p className="text-[0.78125rem] text-danger">{err}</p>}
-      {!err && !w && <p className="text-[0.78125rem] text-navy-900/45">Loading…</p>}
+      {err && <p className="text-[12.5px] text-danger">{err}</p>}
+      {!err && !w && <p className="text-[12.5px] text-navy-900/45">Loading…</p>}
       {c && (<>
         <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-          <div><b className="text-[2.125rem] text-navy-900 leading-none">{Math.round(c.temperature_2m)}°C</b><div className="text-[0.78125rem] text-navy-900/60">{CODES[c.weather_code] || 'Fair'}</div></div>
-          <div className="flex flex-wrap gap-x-6 gap-y-3 text-[0.78125rem] text-navy-900/75">
+          <div><b className="text-[34px] text-navy-900 leading-none">{Math.round(c.temperature_2m)}°C</b><div className="text-[12.5px] text-navy-900/60">{CODES[c.weather_code] || 'Fair'}</div></div>
+          <div className="flex gap-6 text-[12.5px] text-navy-900/75">
             <span className="flex items-center gap-1.5"><Droplets size={14} />{c.relative_humidity_2m}%</span>
             <span className="flex items-center gap-1.5"><Wind size={14} />{Math.round(c.wind_speed_10m)} km/h</span>
             <span className="flex items-center gap-1.5"><CloudRain size={14} />{d.precipitation_probability_max[0]}% today</span>
             <span className="flex items-center gap-1.5"><Thermometer size={14} />{Math.round(d.temperature_2m_min[0])}–{Math.round(d.temperature_2m_max[0])}°C</span>
           </div>
-          <span className={`ml-auto text-[0.71875rem] font-semibold rounded-full px-3 py-1 ${risk ? 'bg-danger-bg text-danger' : 'bg-success-bg text-success'}`}>{risk ? 'Review weather conditions' : 'Weather observation'}</span>
+          <span className={`ml-auto text-[11.5px] font-semibold rounded-full px-3 py-1 ${risk ? 'bg-danger-bg text-danger' : 'bg-success-bg text-success'}`}>{risk ? 'Elevated weather risk' : 'No weather alert'}</span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4 pt-4 border-t border-navy-900/8">
+        <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-navy-900/8">
           {d.time.map((day, i) => (
             <div key={day} className="rounded-xl bg-navy-900/4 px-3 py-2.5">
-              <div className="text-[0.71875rem] font-semibold text-navy-900">{fmtDay(day, i)} <span className="font-normal text-navy-900/50">· {fmtShort(day)}</span></div>
-              <div className="text-[0.71875rem] text-navy-900/65 mt-1 flex items-center gap-2 flex-wrap">
+              <div className="text-[11.5px] font-semibold text-navy-900">{fmtDay(day, i)} <span className="font-normal text-navy-900/50">· {fmtShort(day)}</span></div>
+              <div className="text-[11.5px] text-navy-900/65 mt-1 flex items-center gap-2 flex-wrap">
                 <span className="flex items-center gap-1"><CloudRain size={12} />{d.precipitation_probability_max[i]}%</span>
                 <span className="flex items-center gap-1"><Thermometer size={12} />{Math.round(d.temperature_2m_min[i])}–{Math.round(d.temperature_2m_max[i])}°C</span>
               </div>

@@ -1,5 +1,4 @@
-import React, { useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import React from 'react';
 
 const VARIANTS = {
   primary:
@@ -19,8 +18,8 @@ const VARIANTS = {
 };
 
 const SIZES = {
-  md: 'px-4 py-2.5 text-[0.8125rem]',
-  sm: 'px-3 py-2 text-[0.75rem]'
+  md: 'px-4 py-2.5 text-[13px]',
+  sm: 'px-3 py-2 text-[12px]'
 };
 
 export default function Button({
@@ -30,28 +29,14 @@ export default function Button({
   className = '',
   children,
   type = 'button',
-  onClick, disabled,
   ...props
 }) {
-  const [busy, setBusy] = useState(false);
-  const lock = useRef(false);
-  async function handleClick(event) {
-    if (lock.current || disabled) return;
-    lock.current = true;
-    try {
-      const result = onClick?.(event);
-      if (result && typeof result.then === 'function') { setBusy(true); await result; }
-    } finally { lock.current = false; setBusy(false); }
-  }
   const variantClass = VARIANTS[variant] || VARIANTS.primary;
   const sizeClass = SIZES[size] || SIZES.md;
 
   return (
     <button
       type={type}
-      disabled={disabled || busy}
-      aria-busy={busy || undefined}
-      onClick={handleClick}
       className={`
         rescom-button
         inline-flex
@@ -75,7 +60,6 @@ export default function Button({
       `}
       {...props}
     >
-      {busy && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
       {children}
     </button>
   );

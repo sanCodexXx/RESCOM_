@@ -1,6 +1,3 @@
-import { useAuth } from '../context/AuthContext.jsx';
-import { usePagination } from '../hooks/usePagination.js';
-import { Pagination, Skeleton, LoadError, EmptyState as SharedEmptyState } from '../components/ui/DataStates.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 
 import {
@@ -34,10 +31,7 @@ import {
   RadioGroup,
 } from '../components/ui/Field.jsx';
 
-import { api, savedMessage } from '../lib/api.js';
-import { isLocalId } from '../lib/fieldData.js';
-import { useSyncRefresh } from '../lib/useSyncRefresh.js';
-import { registrationPayload } from '../lib/registration.js';
+import { api } from '../lib/api.js';
 import { useUi } from '../context/UiContext.jsx';
 import { getSocket } from '../lib/socket.js';
 
@@ -73,8 +67,7 @@ const STATUS_OPTIONS = [
   'Checked out',
 ];
 
-export const INITIAL_FORM = {
-  family_id: '',
+const INITIAL_FORM = {
   family_name: '',
   barangay: '',
   contact_number: '',
@@ -114,7 +107,7 @@ function getStatusClass(status) {
 }
 
 
-export function validateEvacuee(form, { full = true } = {}) {
+function validateEvacuee(form, { full = true } = {}) {
   const errors = {};
 
   if (!form.first_name.trim()) {
@@ -142,15 +135,15 @@ export function validateEvacuee(form, { full = true } = {}) {
   }
 
   if (full) {
-    if (!form.family_id && !form.family_name.trim()) {
+    if (!form.family_name.trim()) {
       errors.family_name = 'Family name is required.';
     }
 
-    if (!form.family_id && !BARANGAYS.includes(form.barangay)) {
+    if (!BARANGAYS.includes(form.barangay)) {
       errors.barangay = 'Select a barangay.';
     }
 
-    if (!form.family_id && !normalizePhPhone(form.contact_number)) {
+    if (!normalizePhPhone(form.contact_number)) {
       errors.contact_number =
         'Enter a valid Philippine mobile number.';
     }
@@ -166,8 +159,6 @@ export function validateEvacuee(form, { full = true } = {}) {
 
   return errors;
 }
-
-
 
 
 /* =====================================================
@@ -220,15 +211,15 @@ function SummaryCard({
 
         <div className="min-w-0">
 
-          <p className="text-[0.75rem] font-semibold text-navy-900/55">
+          <p className="text-[12px] font-semibold text-navy-900/55">
             {title}
           </p>
 
-          <p className="text-[1.75rem] font-bold tracking-tight text-navy-900 mt-2 leading-tight">
+          <p className="text-[28px] font-bold tracking-tight text-navy-900 mt-2 leading-tight">
             {value}
           </p>
 
-          <p className="text-[0.6875rem] text-navy-900/45 mt-2">
+          <p className="text-[11px] text-navy-900/45 mt-2">
             {description}
           </p>
 
@@ -302,13 +293,13 @@ function EmptyState({
         )}
       </div>
 
-      <h3 className="text-[0.9375rem] font-bold text-navy-900">
+      <h3 className="text-[15px] font-bold text-navy-900">
         {hasSearch
           ? 'No matching evacuees'
           : 'No evacuees registered'}
       </h3>
 
-      <p className="text-[0.75rem] text-navy-900/50 mt-2 max-w-[310px] leading-relaxed">
+      <p className="text-[12px] text-navy-900/50 mt-2 max-w-[310px] leading-relaxed">
         {hasSearch
           ? 'Try changing your search term or filters to find the records you need.'
           : 'Registered evacuees will appear here when their records are added to the system.'}
@@ -348,9 +339,7 @@ function EmptyState({
    MAIN PAGE
 ===================================================== */
 
-export default function Evacuees({ ctx }) {
-  const { user: currentUser } = useAuth();
-  const isAdmin = currentUser?.role === 'ADMIN_STAFF';
+export default function Evacuees() {
   const {
     toast,
     openModal,
@@ -373,7 +362,6 @@ export default function Evacuees({ ctx }) {
   const [priorityFilter, setPriorityFilter] = useState(false);
 
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
 
 
   /* ===================================================
@@ -381,7 +369,6 @@ export default function Evacuees({ ctx }) {
   =================================================== */
 
   async function load() {
-    setLoadError('');
     setLoading(true);
 
     try {
@@ -413,7 +400,6 @@ export default function Evacuees({ ctx }) {
           : []
       );
     } catch (error) {
-      setLoadError(error.message || 'Unable to load records.');
       toast(
         error?.message || 'Unable to load evacuee records.',
         'bad'
@@ -423,8 +409,6 @@ export default function Evacuees({ ctx }) {
     }
   }
 
-
-  useSyncRefresh(load);
 
   useEffect(() => {
     clearSeed();
@@ -486,8 +470,6 @@ export default function Evacuees({ ctx }) {
   });
 
 
-  const pager = usePagination(filtered, JSON.stringify([q, statusFilter, priorityFilter]));
-
   /* ===================================================
      SUMMARY STATISTICS
   =================================================== */
@@ -523,12 +505,11 @@ export default function Evacuees({ ctx }) {
 
       onConfirm: async () => {
         try {
-          const result = await api.patch(
-            `/evacuees/${evacuee.evacuee_id}/checkout`,
-            { record_id: evacuee.record_id }
+          await api.patch(
+            `/evacuees/${evacuee.evacuee_id}/checkout`
           );
 
-          toast(savedMessage(result, 'Evacuee checked out successfully.'), 'ok');
+          toast('Evacuee checked out successfully.', 'ok');
 
           await load();
         } catch (error) {
@@ -602,7 +583,7 @@ export default function Evacuees({ ctx }) {
               }
 
               try {
-                const result = await api.put(
+                await api.put(
                   `/evacuees/${evacuee.evacuee_id}`,
                   {
                     ...form,
@@ -612,7 +593,7 @@ export default function Evacuees({ ctx }) {
 
                 closeModal();
 
-                toast(savedMessage(result, 'Evacuee updated successfully.'), 'ok');
+                toast('Evacuee updated successfully.', 'ok');
 
                 await load();
               } catch (error) {
@@ -651,7 +632,7 @@ export default function Evacuees({ ctx }) {
             `/evacuees/${evacuee.evacuee_id}`
           );
 
-          toast('Evacuee record deleted.', 'ok');
+          toast('Evacuee record deleted.', 'bad');
 
           await load();
         } catch (error) {
@@ -675,10 +656,9 @@ export default function Evacuees({ ctx }) {
         incident.reporting_status !== 'Resolved'
     );
 
-    const availableCenters = centers.filter(c => c.status === 'Open' && Number(c.capacity) > Number(c.occupancy));
-    if (!availableCenters.length) {
+    if (!centers.length) {
       toast(
-        'An open center with available space is required before registration.',
+        'Add an evacuation center before registering evacuees.',
         'bad'
       );
 
@@ -695,12 +675,12 @@ export default function Evacuees({ ctx }) {
     }
 
     const availableCenter =
-      availableCenters.find(
+      centers.find(
         (center) =>
           Number(center.capacity) -
             Number(center.occupancy) >
           0
-      ) || availableCenters[0];
+      ) || centers[0];
 
     let form = {
       ...INITIAL_FORM,
@@ -723,8 +703,7 @@ export default function Evacuees({ ctx }) {
         <RegisterForm
           initial={form}
           ctl={controller}
-          centers={availableCenters}
-          families={[...new Map(evacuees.filter(e => e.family_id).map(e => [String(e.family_id), e])).values()]}
+          centers={centers}
           incidents={openIncidents}
           onChange={(next) => {
             form = next;
@@ -759,11 +738,39 @@ export default function Evacuees({ ctx }) {
               }
 
               try {
-                const result = await api.post('/evacuees/register', registrationPayload(form));
+                await api.post('/evacuees/register', {
+                  family: {
+                    family_name: form.family_name.trim(),
+
+                    barangay: form.barangay,
+
+                    contact_number: normalizePhPhone(
+                      form.contact_number
+                    ),
+                  },
+
+                  evacuee: {
+                    first_name: form.first_name.trim(),
+
+                    middle_name: form.middle_name.trim(),
+
+                    last_name: form.last_name.trim(),
+
+                    age: parseInt(form.age, 10),
+
+                    gender: form.gender,
+                  },
+
+                  center_id: form.center_id,
+
+                  incident_id: form.incident_id,
+
+                  priority_types: form.priority_types,
+                });
 
                 closeModal();
 
-                toast(savedMessage(result, 'Evacuee registered successfully.'), 'ok');
+                toast('Evacuee registered successfully.', 'ok');
 
                 await load();
               } catch (error) {
@@ -782,13 +789,6 @@ export default function Evacuees({ ctx }) {
     });
   }
 
-
-  const quickHandled = useRef(null);
-  useEffect(() => {
-    if (ctx?.quickAction === 'register' && !loading && !loadError && quickHandled.current !== ctx) {
-      quickHandled.current = ctx; registerModal();
-    }
-  }, [ctx, loading, loadError]);
 
   /* ===================================================
      CLEAR FILTERS
@@ -810,10 +810,9 @@ export default function Evacuees({ ctx }) {
 
       {/* PAGE HEADER */}
 
-      <LoadError message={loadError} onRetry={load} />
       <PageHeader
         title="Evacuees"
-        subtitle="Registration, presence and priority assistance"
+        subtitle="Manage evacuee registrations, household information, evacuation assignments, and priority assistance."
         actions={
           <Button onClick={registerModal}>
             <Plus size={15} />
@@ -833,13 +832,13 @@ export default function Evacuees({ ctx }) {
         gap-4
       ">
 
-        {isAdmin && <SummaryCard
+        <SummaryCard
           icon={<Users size={21} />}
           title="Registered Evacuees"
           value={loading ? '—' : formatNumber(evacuees.length)}
           description="All recorded evacuees"
           tone="blue"
-        />}
+        />
 
         <SummaryCard
           icon={<UserCheck size={21} />}
@@ -857,13 +856,13 @@ export default function Evacuees({ ctx }) {
           tone="pink"
         />
 
-        {isAdmin && <SummaryCard
+        <SummaryCard
           icon={<LogOut size={21} />}
           title="Checked Out"
           value={loading ? '—' : formatNumber(checkedOutCount)}
           description="Records marked checked out"
           tone="amber"
-        />}
+        />
 
       </div>
 
@@ -909,11 +908,11 @@ export default function Evacuees({ ctx }) {
 
             <div>
 
-              <h2 className="text-[0.9375rem] font-bold text-navy-900">
+              <h2 className="text-[15px] font-bold text-navy-900">
                 Evacuee Registry
               </h2>
 
-              <p className="text-[0.75rem] text-navy-900/50 mt-1">
+              <p className="text-[12px] text-navy-900/50 mt-1">
                 Search, review, and manage registered evacuees.
               </p>
 
@@ -983,7 +982,7 @@ export default function Evacuees({ ctx }) {
                 border-0
                 outline-none
                 bg-transparent
-                text-[0.78125rem]
+                text-[12.5px]
                 text-navy-900
                 flex-1
                 min-w-0
@@ -1039,7 +1038,7 @@ export default function Evacuees({ ctx }) {
                 border-0
                 outline-none
                 bg-transparent
-                text-[0.75rem]
+                text-[12px]
                 text-navy-900
                 w-full
                 min-w-0
@@ -1077,7 +1076,7 @@ export default function Evacuees({ ctx }) {
               rounded-xl
               px-3
               py-2.5
-              text-[0.75rem]
+              text-[12px]
               font-semibold
               border
               transition
@@ -1098,7 +1097,7 @@ export default function Evacuees({ ctx }) {
               type="button"
               onClick={clearFilters}
               className="
-                text-[0.75rem]
+                text-[12px]
                 font-semibold
                 text-blue-600
                 hover:text-blue-800
@@ -1128,7 +1127,7 @@ export default function Evacuees({ ctx }) {
           border-navy-900/8
         ">
 
-          <div className="text-[0.75rem] text-navy-900/55">
+          <div className="text-[12px] text-navy-900/55">
 
             Showing{' '}
 
@@ -1146,11 +1145,11 @@ export default function Evacuees({ ctx }) {
 
           </div>
 
-          <div className="flex items-center gap-2 text-[0.6875rem] text-navy-900/45">
+          <div className="flex items-center gap-2 text-[11px] text-navy-900/45">
 
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
 
-            Registry records
+            Live registry
 
           </div>
 
@@ -1159,7 +1158,7 @@ export default function Evacuees({ ctx }) {
 
         {/* TABLE */}
 
-        <div className="hidden lg:block overflow-x-auto scroll-thin">
+        <div className="overflow-x-auto scroll-thin">
 
           <table className="w-full min-w-[950px] border-collapse">
 
@@ -1182,7 +1181,7 @@ export default function Evacuees({ ctx }) {
                     key={heading}
                     className="
                       text-left
-                      text-[0.625rem]
+                      text-[10px]
                       uppercase
                       tracking-[0.06em]
                       text-navy-900/45
@@ -1204,7 +1203,7 @@ export default function Evacuees({ ctx }) {
 
             <tbody>
 
-              {!loading && pager.items.map((evacuee) => (
+              {!loading && filtered.map((evacuee) => (
 
                 <tr
                   key={evacuee.evacuee_id}
@@ -1231,7 +1230,7 @@ export default function Evacuees({ ctx }) {
                         flex
                         items-center
                         justify-center
-                        text-[0.6875rem]
+                        text-[11px]
                         font-bold
                         shrink-0
                       ">
@@ -1243,13 +1242,12 @@ export default function Evacuees({ ctx }) {
 
                       <div className="min-w-0">
 
-                        <p className="text-[0.78125rem] font-bold text-navy-900">
+                        <p className="text-[12.5px] font-bold text-navy-900">
                           {evacuee.first_name} {evacuee.last_name}
-                          {evacuee.pending_sync && <span className="pending-sync-badge">Pending sync</span>}
                         </p>
 
                         {evacuee.middle_name && (
-                          <p className="text-[0.65625rem] text-navy-900/45 mt-0.5">
+                          <p className="text-[10.5px] text-navy-900/45 mt-0.5">
                             {evacuee.middle_name}
                           </p>
                         )}
@@ -1265,7 +1263,7 @@ export default function Evacuees({ ctx }) {
 
                   <td className="px-4 py-4">
 
-                    <span className="text-[0.75rem] text-navy-900/70">
+                    <span className="text-[12px] text-navy-900/70">
                       {evacuee.age ?? '—'}
                     </span>
 
@@ -1273,7 +1271,7 @@ export default function Evacuees({ ctx }) {
                       /
                     </span>
 
-                    <span className="text-[0.75rem] text-navy-900/55">
+                    <span className="text-[12px] text-navy-900/55">
                       {evacuee.gender || '—'}
                     </span>
 
@@ -1291,7 +1289,7 @@ export default function Evacuees({ ctx }) {
                         className="text-navy-900/35 shrink-0"
                       />
 
-                      <span className="text-[0.75rem] text-navy-900/70">
+                      <span className="text-[12px] text-navy-900/70">
                         {evacuee.family_name || '—'}
                       </span>
 
@@ -1311,7 +1309,7 @@ export default function Evacuees({ ctx }) {
                         className="text-navy-900/35 shrink-0"
                       />
 
-                      <span className="text-[0.75rem] text-navy-900/65">
+                      <span className="text-[12px] text-navy-900/65">
                         {evacuee.barangay || '—'}
                       </span>
 
@@ -1331,7 +1329,7 @@ export default function Evacuees({ ctx }) {
                         className="text-blue-500 shrink-0"
                       />
 
-                      <span className="text-[0.75rem] text-navy-900/70 max-w-[180px] truncate">
+                      <span className="text-[12px] text-navy-900/70 max-w-[180px] truncate">
                         {evacuee.center_name || '—'}
                       </span>
 
@@ -1359,7 +1357,7 @@ export default function Evacuees({ ctx }) {
 
                       {!evacuee.priority_types?.length && (
 
-                        <span className="text-[0.6875rem] text-navy-900/30">
+                        <span className="text-[11px] text-navy-900/30">
                           None
                         </span>
 
@@ -1445,7 +1443,7 @@ export default function Evacuees({ ctx }) {
                         <Edit2 size={14} />
                       </button>
 
-                      {isAdmin && <button
+                      <button
                         type="button"
                         onClick={() => removeEvacuee(evacuee)}
                         title="Delete evacuee"
@@ -1464,7 +1462,7 @@ export default function Evacuees({ ctx }) {
                         "
                       >
                         <Trash2 size={14} />
-                      </button>}
+                      </button>
 
                     </div>
 
@@ -1481,31 +1479,29 @@ export default function Evacuees({ ctx }) {
         </div>
 
 
-        {!loading && <div className="lg:hidden divide-y divide-slate-100">
-          {pager.items.map(person => <article key={person.evacuee_id} className="p-4 sm:p-5 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0"><h3 className="font-semibold text-sm break-words">{person.first_name} {person.last_name}</h3>{person.pending_sync && <span className="pending-sync-badge">Pending sync</span>}
-                <p className="text-xs text-slate-500 mt-1">{person.age} years · {person.gender} · {person.family_name}</p></div>
-              <Badge className={getStatusClass(person.record_status)}>{person.record_status}</Badge>
-            </div>
-            <p className="text-xs text-slate-600 break-words">{person.center_name || 'Unassigned center'} · {person.barangay}</p>
-            {!!person.priority_types?.length && <div className="flex flex-wrap gap-1">{person.priority_types.map(type => <Badge key={type} className="bg-pink-50 text-pink-700">{type}</Badge>)}</div>}
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="ghost" onClick={() => editModal(person)}><Edit2 size={14} />Edit</Button>
-              {person.record_status === 'Present' && <Button size="sm" variant="ghost" onClick={() => checkout(person)}><LogOut size={14} />Check out</Button>}
-              {isAdmin && <Button size="sm" variant="subtle" aria-label={`Delete ${person.first_name} ${person.last_name}`} onClick={() => removeEvacuee(person)}><Trash2 size={14} />Delete</Button>}
-            </div>
-          </article>)}
-        </div>}
-
         {/* LOADING STATE */}
 
-        {loading && <Skeleton label="Loading evacuee records" />}
+        {loading && (
+
+          <div className="flex flex-col items-center justify-center py-14">
+
+            <RefreshCw
+              size={23}
+              className="animate-spin text-blue-600 mb-3"
+            />
+
+            <p className="text-[12px] font-medium text-navy-900/60">
+              Loading evacuee records...
+            </p>
+
+          </div>
+
+        )}
 
 
         {/* EMPTY STATE */}
 
-        {!loading && !loadError && filtered.length === 0 && (
+        {!loading && filtered.length === 0 && (
 
           <EmptyState
             hasSearch={
@@ -1538,11 +1534,11 @@ export default function Evacuees({ ctx }) {
             bg-slate-50/50
           ">
 
-            <p className="text-[0.6875rem] text-navy-900/45">
-              {formatNumber(filtered.length)} matching records.
+            <p className="text-[11px] text-navy-900/45">
+              Showing {formatNumber(filtered.length)} matching records.
             </p>
 
-            <p className="text-[0.6875rem] text-navy-900/45">
+            <p className="text-[11px] text-navy-900/45">
               Evacuation records are updated from the system registry.
             </p>
 
@@ -1552,7 +1548,6 @@ export default function Evacuees({ ctx }) {
 
       </section>
 
-      {!loading && <Pagination pager={pager} />}
     </div>
   );
 }
@@ -1600,7 +1595,7 @@ function NameAgeGender({
         items-center
         gap-2
         mb-3
-        text-[0.75rem]
+        text-[12px]
         font-bold
         text-navy-900
       ">
@@ -1746,7 +1741,7 @@ function EditForm({
 
       <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 mb-4">
 
-        <p className="text-[0.6875rem] text-blue-800 leading-relaxed">
+        <p className="text-[11px] text-blue-800 leading-relaxed">
           Update the evacuee's personal information.
           Family and evacuation assignment information will remain unchanged.
         </p>
@@ -1768,11 +1763,10 @@ function EditForm({
    REGISTER FORM
 ===================================================== */
 
-export function RegisterForm({
+function RegisterForm({
   initial,
   ctl,
   centers,
-  families,
   incidents,
   onChange,
 }) {
@@ -1792,13 +1786,8 @@ export function RegisterForm({
       [key]: value,
     };
 
-    if (key === 'family_id') {
-      const household = families.find(f => String(f.family_id) === String(value));
-      next = { ...next, family_name: household?.family_name || '', barangay: household?.barangay || '', contact_number: household?.contact_number || '' };
-    }
-
     if (
-      !form.family_id && key === 'last_name' &&
+      key === 'last_name' &&
       (
         form.family_name === '' ||
         form.family_name === autoFamily.current
@@ -1857,7 +1846,7 @@ export function RegisterForm({
         gap-2
         pt-4
         mb-2
-        text-[0.75rem]
+        text-[12px]
         font-bold
         text-navy-900
         border-t
@@ -1869,13 +1858,6 @@ export function RegisterForm({
       </div>
 
 
-      <Field label="Household">
-        <Ctrl><Select value={form.family_id} onChange={e => set('family_id', e.target.value)}>
-          <option value="">Create a new household</option>
-          {families.map(f => <option key={f.family_id} value={f.family_id}>{f.family_name} · {f.barangay} · {isLocalId(f.family_id) ? 'Pending sync' : `Household #${f.family_id}`}</option>)}
-        </Select></Ctrl>
-        <p className="text-xs text-slate-500 mt-2">Choose an existing household when registering another family member.</p>
-      </Field>
       <Field
         label="Family Name"
         required
@@ -1883,7 +1865,7 @@ export function RegisterForm({
       >
         <Ctrl error={errors.family_name}>
           <TextInput
-            disabled={Boolean(form.family_id)} value={form.family_name}
+            value={form.family_name}
             onChange={(event) =>
               set('family_name', event.target.value)
             }
@@ -1903,7 +1885,7 @@ export function RegisterForm({
         >
           <Ctrl error={errors.barangay}>
             <Select
-              disabled={Boolean(form.family_id)} value={form.barangay}
+              value={form.barangay}
               onChange={(event) =>
                 set('barangay', event.target.value)
               }
@@ -1938,7 +1920,7 @@ export function RegisterForm({
               autoComplete="tel"
               maxLength={17}
               placeholder="+63 9XX XXX XXXX"
-              disabled={Boolean(form.family_id)} value={form.contact_number}
+              value={form.contact_number}
               onChange={(event) =>
                 set(
                   'contact_number',
@@ -1960,7 +1942,7 @@ export function RegisterForm({
         gap-2
         pt-4
         mb-2
-        text-[0.75rem]
+        text-[12px]
         font-bold
         text-navy-900
         border-t
@@ -2051,7 +2033,7 @@ export function RegisterForm({
         gap-2
         pt-4
         mb-2
-        text-[0.75rem]
+        text-[12px]
         font-bold
         text-navy-900
         border-t
@@ -2065,7 +2047,7 @@ export function RegisterForm({
 
       <Field label="Priority Categories (optional)">
 
-        <p className="text-[0.6875rem] text-navy-900/45 mb-3">
+        <p className="text-[11px] text-navy-900/45 mb-3">
           Select all categories that apply to the evacuee.
         </p>
 
@@ -2082,7 +2064,7 @@ export function RegisterForm({
                 aria-pressed={selected}
                 onClick={() => togglePriority(type)}
                 className={`
-                  text-[0.75rem]
+                  text-[12px]
                   rounded-lg
                   px-3
                   py-2
