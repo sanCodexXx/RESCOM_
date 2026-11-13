@@ -11,7 +11,7 @@ export default function Badge({
         inline-flex
         items-center
         gap-1
-        text-[11px]
+        text-[0.6875rem]
         font-semibold
         px-2.5
         py-1

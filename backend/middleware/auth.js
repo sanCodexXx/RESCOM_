@@ -14,10 +14,12 @@ async function verifyToken(req, res, next) {
   }
 
   try {
-    const { rows: [u] } = await db.query('SELECT status FROM USERS WHERE user_id = $1', [payload.user_id]);
+    const { rows: [u] } = await db.query('SELECT status, role FROM USERS WHERE user_id = $1', [payload.user_id]);
     if (!u) return res.status(401).json({ error: 'This account no longer exists' });
     if (u.status === 'Pending') return res.status(401).json({ error: 'Your account is waiting for approval' });
     if (u.status === 'Inactive') return res.status(401).json({ error: 'Your account has been deactivated' });
+
+    payload.role = u.role;
 
     // Record activity at most once every 5 minutes, for the "Last Active" column.
     db.query(
@@ -25,8 +27,7 @@ async function verifyToken(req, res, next) {
       [payload.user_id]
     ).catch(() => {});
   } catch (e) {
-    // 42703 = the status column doesn't exist yet (migration 005 not run). Don't lock everyone out.
-    if (e.code !== '42703') return next(e);
+    return next(e);
   }
 
   req.user = payload; // { user_id, role, username }

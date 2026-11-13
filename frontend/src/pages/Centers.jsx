@@ -1,3 +1,6 @@
+import { useAuth } from '../context/AuthContext.jsx';
+import { usePagination } from '../hooks/usePagination.js';
+import { Pagination, Skeleton, LoadError, EmptyState as SharedEmptyState } from '../components/ui/DataStates.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import { Plus, Edit2, Trash2, MapPin, ImagePlus, Building2, Users, ShieldAlert, Home } from 'lucide-react';
 import { PageHeader } from '../components/layout/Shell.jsx';
@@ -5,7 +8,8 @@ import Button from '../components/ui/Button.jsx';
 import Badge, { STATUS_PILL } from '../components/ui/Badge.jsx';
 import { ProgressBar } from '../components/ui/StatCard.jsx';
 import { Field, Ctrl, TextInput, Select } from '../components/ui/Field.jsx';
-import { api } from '../lib/api.js';
+import { api, savedMessage } from '../lib/api.js';
+import { useSyncRefresh } from '../lib/useSyncRefresh.js';
 import { useUi } from '../context/UiContext.jsx';
 import { getSocket } from '../lib/socket.js';
 import { peekSeed, clearSeed } from '../lib/searchSeed.js';
@@ -18,12 +22,18 @@ function occColor(pct) {
 }
 
 export default function Centers() {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'ADMIN_STAFF';
   const { toast, openModal, closeModal, openConfirm, openSuccess } = useUi();
   const [centers, setCenters] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const seeded = useRef(false);
 
+  const pager = usePagination(centers, '');
+
   async function load() {
+    setLoadError('');
     setLoading(true);
     try {
       const list = await api.get('/centers');
@@ -35,9 +45,11 @@ export default function Centers() {
         if (hit) showDetails(hit, list);
       }
     }
-    catch (e) { toast(e.message, 'bad'); }
+    catch (e) { setLoadError(e.message); toast(e.message, 'bad'); }
     finally { setLoading(false); }
   }
+
+  useSyncRefresh(load);
 
   useEffect(() => {
     load();
@@ -48,6 +60,7 @@ export default function Centers() {
   }, []);
 
   function centerModal(existing) {
+    if (!isAdmin) return;
     let form = existing
       ? { center_name: existing.center_name, barangay: existing.barangay, address: existing.address || '', capacity: existing.capacity, status: existing.status, image_url: existing.image_url || '' }
       : { center_name: '', barangay: '', address: '', capacity: '', status: 'Open', image_url: '' };
@@ -64,11 +77,13 @@ export default function Centers() {
           try {
             const payload = { ...form };
             if (imageFile) payload.image = imageFile;
-            if (existing) await api.putForm(`/centers/${existing.center_id}`, payload);
-            else await api.postForm('/centers', payload);
+            const result = existing
+              ? await api.putForm(`/centers/${existing.center_id}`, payload)
+              : await api.postForm('/centers', payload);
             closeModal();
             load();
-            openSuccess({ title: existing ? 'Center Updated' : 'Center Added', message: form.center_name });
+            if (result?.queued) toast(savedMessage(result), 'ok');
+            else openSuccess({ title: existing ? 'Center Updated' : 'Center Added', message: form.center_name });
           } catch (e) { toast(e.message, 'bad'); }
         }}>{existing ? 'Save Changes' : 'Add Center'}</Button>
       </>
@@ -80,7 +95,7 @@ export default function Centers() {
       title: 'Remove center?',
       msg: `<b>${c.center_name}</b> will be permanently removed.`,
       onConfirm: async () => {
-        try { await api.del(`/centers/${c.center_id}`); toast('Center removed', 'bad'); load(); }
+        try { await api.del(`/centers/${c.center_id}`); toast('Center removed', 'ok'); load(); }
         catch (e) { toast(e.message, 'bad'); }
       }
     });
@@ -106,50 +121,51 @@ export default function Centers() {
               : <div className="w-full h-full grid place-items-center text-navy-900/25"><Building2 size={40} /></div>}
             <span className="absolute top-2.5 right-2.5"><Badge className={STATUS_PILL[c.status]}>{pct >= 90 && c.status !== 'Closed' ? 'Near Full' : c.status}</Badge></span>
           </div>
-          <div className="text-[12.5px] text-navy-900/70 flex items-start gap-1.5 mb-1"><MapPin size={14} className="mt-0.5 shrink-0" /><span><b className="text-navy-900">{c.barangay}</b>{c.address ? ` · ${c.address}` : ''}</span></div>
-          <div className="flex justify-between text-[12px] mt-4 mb-1.5 text-navy-900/65"><span>Occupancy</span><b className="text-navy-900">{c.occupancy} / {c.capacity} ({pct}%)</b></div>
+          <div className="text-[0.78125rem] text-navy-900/70 flex items-start gap-1.5 mb-1"><MapPin size={14} className="mt-0.5 shrink-0" /><span><b className="text-navy-900">{c.barangay}</b>{c.address ? ` · ${c.address}` : ''}</span></div>
+          <div className="flex justify-between text-[0.75rem] mt-4 mb-1.5 text-navy-900/65"><span>Occupancy</span><b className="text-navy-900">{c.occupancy} / {c.capacity} ({pct}%)</b></div>
           <ProgressBar pct={pct} color={occColor(pct)} />
-          <div className="text-[11.5px] text-navy-900/50 mt-1.5">{Math.max(0, c.capacity - c.occupancy)} slots available</div>
+          <div className="text-[0.71875rem] text-navy-900/50 mt-1.5">{Math.max(0, c.capacity - c.occupancy)} slots available</div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4">
             {[['Families', families, Home], ['Male', male, Users], ['Female', female, Users], ['Priority', priority, ShieldAlert]].map(([label, v, Icon]) => (
               <div key={label} className="rounded-xl bg-navy-900/4 px-3 py-2.5 text-center">
                 <Icon size={15} className="mx-auto text-accent-400 mb-1" />
-                <div className="text-[18px] font-bold text-navy-900 leading-none">{v}</div>
-                <div className="text-[10.5px] text-navy-900/50 mt-1">{label}</div>
+                <div className="text-[1.125rem] font-bold text-navy-900 leading-none">{v}</div>
+                <div className="text-[0.65625rem] text-navy-900/50 mt-1">{label}</div>
               </div>
             ))}
           </div>
-          <b className="block text-[13px] text-navy-900 mt-5 mb-2">Currently staying here ({people.length})</b>
+          <b className="block text-[0.8125rem] text-navy-900 mt-5 mb-2">Currently staying here ({people.length})</b>
           <div className="max-h-[200px] overflow-y-auto scroll-thin border border-navy-900/8 rounded-xl divide-y divide-navy-900/8">
             {people.map(e => (
               <div key={e.evacuee_id} className="px-3 py-2 flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <b className="block text-[12.5px] text-navy-900 truncate">{e.first_name} {e.last_name}</b>
-                  <span className="text-[11px] text-navy-900/50">{e.age ?? '—'} / {e.gender ?? '—'} · {e.family_name || 'No family'}</span>
+                  <b className="block text-[0.78125rem] text-navy-900 truncate">{e.first_name} {e.last_name}</b>
+                  <span className="text-[0.6875rem] text-navy-900/50">{e.age ?? '—'} / {e.gender ?? '—'} · {e.family_name || 'No family'}</span>
                 </div>
                 <div className="flex gap-1 flex-wrap justify-end shrink-0">{(e.priority_types || []).map(t => <Badge key={t} className="bg-pink-bg text-pink">{t}</Badge>)}</div>
               </div>
             ))}
-            {!people.length && <p className="px-3 py-5 text-center text-[12px] text-navy-900/45">No one is checked in at this center right now.</p>}
+            {!people.length && <p className="px-3 py-5 text-center text-[0.75rem] text-navy-900/45">No one is checked in at this center right now.</p>}
           </div>
         </div>
       ),
       footer: <>
         <Button variant="ghost" block onClick={closeModal}>Close</Button>
-        <Button block onClick={() => { closeModal(); centerModal(c); }}><Edit2 size={14} />Edit Center</Button>
+        {isAdmin && <Button block onClick={() => { closeModal(); centerModal(c); }}><Edit2 size={14} />Edit Center</Button>}
       </>
     });
   }
 
   return (
     <>
-      <PageHeader title="Evacuation Centers" subtitle="Directory and live capacity of all designated centers"
-        actions={<Button onClick={() => centerModal(null)}><Plus size={14} />Add Center</Button>} />
+      <LoadError message={loadError} onRetry={load} />
+      <PageHeader title="Evacuation Centers" subtitle="Availability and current occupancy"
+        actions={isAdmin && <Button onClick={() => centerModal(null)}><Plus size={14} />Add Center</Button>} />
 
-      {loading && <p className="text-navy-900/45 text-[12.5px]">Loading…</p>}
+      {loading && <Skeleton label="Loading centers" rows={3} />}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {centers.map(c => {
+        {pager.items.map(c => {
           const pct = c.capacity ? Math.round((c.occupancy / c.capacity) * 100) : 0;
           return (
             <div key={c.center_id} role="button" tabIndex={0} aria-label={`View details of ${c.center_name}`} onClick={() => showDetails(c)} onKeyDown={e => { if (e.key === 'Enter') showDetails(c); }} className="glass rounded-glass shadow-glass-sm overflow-hidden cursor-pointer transition hover:shadow-glass hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400">
@@ -160,20 +176,22 @@ export default function Centers() {
                 <span className="absolute top-2.5 right-2.5"><Badge className={STATUS_PILL[c.status]}>{pct >= 90 ? 'Near Full' : c.status}</Badge></span>
               </div>
               <div className="p-5">
-                <b className="text-[14px] text-navy-900 leading-snug block">{c.center_name}</b>
-                <div className="text-[11px] text-navy-900/45 my-2 flex items-center gap-1"><MapPin size={11} />{c.barangay}</div>
-                <div className="flex justify-between text-[12px] mb-1.5 text-navy-900/65"><span>Occupancy</span><b className="text-navy-900">{c.occupancy} / {c.capacity}</b></div>
+                <b className="text-[0.875rem] text-navy-900 leading-snug block">{c.center_name}</b>
+                {c.pending_sync && <span className="pending-sync-badge">Pending sync</span>}
+                <div className="text-[0.6875rem] text-navy-900/45 my-2 flex items-center gap-1"><MapPin size={11} />{c.barangay}</div>
+                <div className="flex justify-between text-[0.75rem] mb-1.5 text-navy-900/65"><span>Occupancy</span><b className="text-navy-900">{c.occupancy} / {c.capacity}</b></div>
                 <ProgressBar pct={pct} color={occColor(pct)} />
                 <div className="flex gap-2 mt-4" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
-                  <Button size="sm" variant="ghost" className="flex-1" onClick={() => centerModal(c)}><Edit2 size={13} />Edit</Button>
-                  <Button size="sm" variant="danger" onClick={() => delCenter(c)}><Trash2 size={13} /></Button>
+                  {isAdmin && <Button size="sm" variant="ghost" className="flex-1" onClick={() => centerModal(c)}><Edit2 size={13} />Edit</Button>}
+                  {isAdmin && <Button size="sm" variant="danger" onClick={() => delCenter(c)}><Trash2 size={13} /><span className="sr-only">Delete {c.center_name}</span></Button>}
                 </div>
               </div>
             </div>
           );
         })}
       </div>
-      {!loading && !centers.length && <p className="text-navy-900/45 text-[12.5px] mt-4">No evacuation centers yet — add the first one above.</p>}
+      {!loading && !loadError && !centers.length && <SharedEmptyState title="No evacuation centers yet" message={isAdmin ? "Add a designated center before registering evacuees." : "An administrator must add an available center before registration."} action={isAdmin ? "Add center" : undefined} onAction={() => centerModal(null)} />}
+      {!loading && <Pagination pager={pager} />}
     </>
   );
 }
@@ -223,8 +241,8 @@ function CenterForm({ initial, onChange, onFile }) {
             {preview ? <img src={preview} alt="" className="w-full h-full object-cover" /> : <ImagePlus size={20} className="text-navy-900/30" />}
           </div>
           <div>
-            <span className="text-[12px] font-semibold text-accent-700">{preview ? 'Change photo' : 'Upload photo'}</span>
-            <p className="text-[10.5px] text-navy-900/40">JPG, PNG or WEBP — up to 5MB</p>
+            <span className="text-[0.75rem] font-semibold text-accent-700">{preview ? 'Change photo' : 'Upload photo'}</span>
+            <p className="text-[0.65625rem] text-navy-900/40">JPG, PNG or WEBP — up to 5MB</p>
           </div>
           <input type="file" accept="image/*" className="hidden" onChange={pickImage} />
         </label>

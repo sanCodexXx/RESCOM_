@@ -4,12 +4,17 @@
 -- project documentation (Activity 4 supporting docs).
 -- ============================================================
 
+DROP TABLE IF EXISTS RESCOM_FIELD_WRITES;
 DROP TABLE IF EXISTS CENTER_IMAGES CASCADE;
+DROP TABLE IF EXISTS STARLINK_USER_DISHES;
+DROP TABLE IF EXISTS STARLINK_DISH_REPORTS;
+DROP TABLE IF EXISTS STARLINK_STATUS;
 DROP TABLE IF EXISTS PASSWORD_RESETS CASCADE;
 DROP TABLE IF EXISTS USER_NOTIFICATIONS CASCADE;
 DROP TABLE IF EXISTS NOTIFICATIONS CASCADE;
 DROP TABLE IF EXISTS DROMIC_REPORTS CASCADE;
 DROP TABLE IF EXISTS PRIORITY_CASES CASCADE;
+DROP TABLE IF EXISTS EVACUEE_OFFLINE_SUBMISSIONS;
 DROP TABLE IF EXISTS EVACUATION_RECORDS CASCADE;
 DROP TABLE IF EXISTS DISASTER_INCIDENTS CASCADE;
 DROP TABLE IF EXISTS EVACUATION_CENTERS CASCADE;
@@ -33,6 +38,8 @@ CREATE TABLE USERS (
   unit           VARCHAR(150),
   latitude       DOUBLE PRECISION,
   longitude      DOUBLE PRECISION,
+  status         VARCHAR(20) NOT NULL DEFAULT 'Active' CONSTRAINT users_status_valid CHECK (status IN ('Active', 'Inactive', 'Pending')),
+  last_active_at TIMESTAMP,
   created_at     TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -85,6 +92,26 @@ CREATE TABLE CENTER_IMAGES (
   image_type VARCHAR(50) NOT NULL DEFAULT 'image/jpeg'
 );
 
+CREATE TABLE STARLINK_STATUS (
+  slot SMALLINT PRIMARY KEY CHECK (slot = 1),
+  reachable BOOLEAN NOT NULL,
+  alerts TEXT[] NOT NULL DEFAULT '{}',
+  reported_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE STARLINK_DISH_REPORTS (
+  terminal_id TEXT PRIMARY KEY,
+  reachable BOOLEAN NOT NULL,
+  alerts TEXT[] NOT NULL DEFAULT '{}',
+  reported_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE STARLINK_USER_DISHES (
+  user_id INTEGER PRIMARY KEY REFERENCES USERS(user_id) ON DELETE CASCADE,
+  terminal_id TEXT NOT NULL,
+  name VARCHAR(80) NOT NULL
+);
+
 -- ------------------------------------------------------------
 -- DISASTER_INCIDENTS
 -- ------------------------------------------------------------
@@ -118,6 +145,23 @@ CREATE TABLE EVACUATION_RECORDS (
   remarks        TEXT
 );
 
+CREATE TABLE RESCOM_FIELD_WRITES (
+  user_id INTEGER NOT NULL REFERENCES USERS(user_id) ON DELETE CASCADE,
+  change_id UUID NOT NULL,
+  fingerprint TEXT NOT NULL,
+  response JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, change_id)
+);
+
+CREATE TABLE EVACUEE_OFFLINE_SUBMISSIONS (
+  user_id INTEGER NOT NULL REFERENCES USERS(user_id) ON DELETE CASCADE,
+  submission_id UUID NOT NULL,
+  payload_hash TEXT NOT NULL,
+  record_id INTEGER REFERENCES EVACUATION_RECORDS(record_id) ON DELETE SET NULL,
+  PRIMARY KEY (user_id, submission_id)
+);
+
 -- ------------------------------------------------------------
 -- PRIORITY_CASES: vulnerable-person flags on an evacuee
 -- ------------------------------------------------------------
@@ -145,7 +189,8 @@ CREATE TABLE DROMIC_REPORTS (
   field_remarks    TEXT,
   report_no        INTEGER,
   as_of            TIMESTAMP,
-  snapshot         JSONB
+  snapshot         JSONB,
+  deleted_at       TIMESTAMPTZ
 );
 
 -- ------------------------------------------------------------

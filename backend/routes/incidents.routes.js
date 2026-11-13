@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { verifyToken, requireRole } = require('../middleware/auth');
 const { emit, notify } = require('../utils/notify');
+const { fieldWrite, writeError } = require('../utils/fieldWrite');
 
 const router = express.Router();
 router.use(verifyToken);
@@ -16,19 +17,20 @@ router.get('/', async (req, res) => {
   res.json(rows);
 });
 
-router.post('/', async (req, res) => {
+router.post('/', fieldWrite(201, async (req, client, receipt) => {
   const { disaster_name, disaster_type, brgy, severity, field_remarks } = req.body;
-  if (!disaster_name || !disaster_type) return res.status(400).json({ error: 'disaster_name and disaster_type are required' });
+  if (!disaster_name || !disaster_type) throw writeError(400, 'Disaster name and type are required.');
 
-  const { rows: [incident] } = await db.query(
-    `INSERT INTO DISASTER_INCIDENTS (disaster_name, disaster_type, brgy, severity, field_remarks, reporting_status, reported_by)
-     VALUES ($1,$2,$3,$4,$5,'Pending',$6) RETURNING *`,
-    [disaster_name, disaster_type, brgy || null, severity || 'Medium', field_remarks || null, req.user.user_id]
+  const { rows: [incident] } = await client.query(
+    `INSERT INTO DISASTER_INCIDENTS (disaster_name, disaster_type, brgy, severity, field_remarks, reporting_status, reported_by, date_started)
+     VALUES ($1,$2,$3,$4,$5,'Pending',$6,COALESCE($7::timestamptz,NOW())) RETURNING *`,
+    [disaster_name, disaster_type, brgy || null, severity || 'Medium', field_remarks || null, req.user.user_id, receipt?.capturedAt]
   );
+  return incident;
+}, (req, incident) => {
   emit('new_incident_dispatched', incident);
   notify('Emergency Dispatched', `${incident.disaster_type} reported in ${incident.brgy || 'unspecified area'}`);
-  res.status(201).json(incident);
-});
+}));
 
 // Incident lifecycle:  Pending -> En Route -> Active -> Resolved
 //   Pending  : reported, nobody dispatched yet
@@ -36,23 +38,24 @@ router.post('/', async (req, res) => {
 //   Active   : responders are on scene / the incident is on-going
 //   Resolved : finished; the end date is stamped (and cleared again if reopened)
 const INCIDENT_STATUSES = ['Pending', 'En Route', 'Active', 'Resolved'];
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', fieldWrite(200, async (req, client, receipt) => {
   const { reporting_status } = req.body;
   if (!INCIDENT_STATUSES.includes(reporting_status)) {
-    return res.status(400).json({ error: `Status must be one of: ${INCIDENT_STATUSES.join(', ')}` });
+    throw writeError(400, `Status must be one of: ${INCIDENT_STATUSES.join(', ')}`);
   }
-  const { rows } = await db.query(
+  const { rows } = await client.query(
     `UPDATE DISASTER_INCIDENTS
         SET reporting_status = $1::varchar,
-            date_ended = CASE WHEN $1::varchar = 'Resolved' THEN NOW() ELSE NULL END
+            date_ended = CASE WHEN $1::varchar = 'Resolved' THEN COALESCE($3::timestamptz,NOW()) ELSE NULL END
       WHERE incident_id = $2 RETURNING *`,
-    [reporting_status, req.params.id]
+    [reporting_status, req.params.id, receipt?.capturedAt]
   );
-  if (!rows[0]) return res.status(404).json({ error: 'Incident not found' });
-  emit('incident_status_changed', rows[0]);
-  notify('Dispatch Status Update', `Incident #${req.params.id} status changed to ${reporting_status}`);
-  res.json(rows[0]);
-});
+  if (!rows[0]) throw writeError(404, 'Incident not found');
+  return rows[0];
+}, (req, incident) => {
+  emit('incident_status_changed', incident);
+  notify('Dispatch Status Update', `Incident #${req.params.id} status changed to ${incident.reporting_status}`);
+}));
 
 router.delete('/:id', requireRole('ADMIN_STAFF'), async (req, res) => {
   await db.query('DELETE FROM DISASTER_INCIDENTS WHERE incident_id = $1', [req.params.id]);

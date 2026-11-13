@@ -15,12 +15,12 @@ export const NAV = [
 
 export default function Sidebar({ open, route, onNav, onLogout, role }) {
   return (
-    <aside className={`w-[240px] shrink-0 bg-navy-900 text-white p-3 flex flex-col fixed top-0 left-0 z-40 h-[100dvh] overflow-y-auto transition-transform duration-200 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+    <aside aria-hidden={!open} inert={!open ? '' : undefined} id="main-navigation" aria-label="Main navigation" className={`w-[240px] shrink-0 bg-navy-900 text-white p-3 flex flex-col fixed top-0 left-0 z-40 h-[100dvh] overflow-y-auto transition-transform duration-200 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
       <div className="flex gap-2.5 items-center px-1.5 pb-5 pt-1">
         <img src={logo} alt="" className="w-[42px] h-[42px] object-contain shrink-0" />
         <div>
-          <b className="block text-[16px] tracking-wide">RESCOM</b>
-          <span className="block text-[9.5px] text-white/50">Evacuation Coordination</span>
+          <b className="block text-[1rem] tracking-wide">RESCOM</b>
+          <span className="block text-[0.59375rem] text-white/50">Evacuation Coordination</span>
         </div>
       </div>
 
@@ -29,8 +29,9 @@ export default function Sidebar({ open, route, onNav, onLogout, role }) {
         return (
           <button
             key={key}
+            aria-current={active ? 'page' : undefined}
             onClick={() => onNav(key)}
-            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] mb-1 w-full text-left transition
+            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[0.8125rem] mb-1 w-full text-left transition
               ${active ? 'bg-accent-500/30 border border-white/20 text-white font-semibold shadow-glass-sm' : 'text-white/70 hover:bg-white/10 border border-transparent'}`}
           >
             <Icon size={15} />
@@ -40,7 +41,7 @@ export default function Sidebar({ open, route, onNav, onLogout, role }) {
       })}
 
       <div className="grow" />
-      <button onClick={onLogout} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] text-white/60 border-t border-white/10 mt-2 pt-3.5 w-full text-left hover:text-white">
+      <button onClick={onLogout} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[0.8125rem] text-white/60 border-t border-white/10 mt-2 pt-3.5 w-full text-left hover:text-white">
         <LogOut size={15} /> Logout
       </button>
     </aside>
