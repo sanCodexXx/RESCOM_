@@ -1,183 +1,39 @@
-> **Current UI update:** centered feedback popups, focused Field Personnel views, collapsed Admin analysis, corrected center-edit permissions and PDF-only reporting. Start with UPDATE_GUIDE.md.
+# RESCOM · San Nicolas MDRRMO
 
-> **PDF-only reporting:** Excel/CSV report options were removed following the MDRRMO interview. See the first section of UPDATE_GUIDE.md for the four replacement files.
+RESCOM manages disaster events, evacuation centers, households, individual evacuees, priority cases, personnel, and DROMIC-aligned reports. The hosted application retains its existing D1 database and site audience. Training records are illustrative and stay in the training workspace.
 
-> **Updated project:** Start with [UPDATE_GUIDE.md](UPDATE_GUIDE.md) and [REVIEW_REPORT.md](REVIEW_REPORT.md). For an existing database, apply the additive `backend/migrations/004_user_status.sql` migration. The fresh-install `schema.sql` below drops existing tables. Keep your existing environment files.
+For Windows setup and publishing from VS Code, open [START-HERE.md](START-HERE.md).
 
-# RESCOM — Real-time Evacuation Status Coordination and Monitoring
+## Staff access
 
-Full-stack implementation matching the Activity 4 relational schema, use case
-diagram, activity diagram, sequence diagrams and class diagram.
+The site owner opens the administrator workspace with their ChatGPT account. In the live workspace, create a personnel invitation with the staff member's ChatGPT email, role, and assigned center for field staff. A visitor must already have permission to open the site. When the invited visitor signs in with that email, RESCOM activates the invited profile. Field staff can update their assigned center, record households and priority needs, and log disaster events.
 
-- **Backend:** Node.js, Express 5, PostgreSQL (`pg`), Socket.io, JWT auth, bcrypt
-- **Frontend:** React 18 (Vite), Tailwind CSS, responsive shared UI, socket.io-client
+Email/password registration and password reset use Brevo. Set `BREVO_API_KEY` and `MAIL_FROM` as server secrets and redeploy. `MAIL_FROM` must be verified in Brevo. Self-registration requires email verification and administrator approval.
 
-Two roles, matching the use case diagram: **Admin Staff** and **Field Personnel**.
+## Work offline
 
-```
-rescom/
-├── backend/     Express API + PostgreSQL + Socket.io
-└── frontend/    React (Vite) responsive client
-```
+Open the relevant workspace online before going into the field. In Workspace settings, **Offline access on this device** shows when the cached workspace is ready. The browser can reopen it during a connection loss. Cached access follows the account's session window and is available on the same browser profile.
 
-## 1. Database setup
+Household registrations, household updates, priority care updates, center updates, disaster events, and authorized DROMIC changes can be queued. The connection indicator shows pending changes. RESCOM checks the server automatically and submits the queue when connectivity returns. A change that needs review stays on the device and can be reopened through **Sync status**. Personnel management and deleting shared records require an active connection. Keep the workspace open or reopen it to sync.
 
-Create the database and load the schema:
+## DROMIC reports
 
-```bash
-createdb mdrrmo_db
-psql -d mdrrmo_db -f backend/schema.sql
-```
+Each new report covers one disaster event. RESCOM assigns the next report number, stores a dated snapshot, and supports Draft, Issued, and Final status. Final reports are locked. Review the figures and use CSV export or **Print / PDF** to create a report copy.
 
-(Adjust the database name to whatever you set in `backend/.env` — it defaults
-to `mdrrmo_db` from your original `_env` file.)
+The app derives inside-center figures from recorded households. Enter affected population and outside-center figures only with a verified source. For events that included transfers, the recorded per-center figures reflect the center stored on the household record. The summary is prepared for review before official submission.
 
-## 2. Backend
+## Connect a Starlink dish
 
-```bash
-cd backend
-npm install
-cp .env.example .env        # then edit DB_PASSWORD / JWT_SECRET
-npm run seed                # creates demo accounts + sample data (optional but recommended)
-npm run dev                 # http://localhost:5000
+Join Starlink Wi-Fi through the device's network settings. The **Starlink** icon beside search opens the dish profile and diagnostics. Download the relay on the computer connected to the Starlink network, extract it, run `npm ci` and `npm start`, then choose **Check dish** in RESCOM. See the [relay instructions](starlink-relay/README.md).
+
+## Development
+
+Install the existing dependencies, then run the Sites build. This builds the Vinext worker, prepares the offline app shell from the build's assets, and packages the Starlink relay. Apply pending D1 migrations before running a local preview. Use the Sites publishing workflow for hosted deployment.
+
+```sh
+node node_modules/typescript/bin/tsc --noEmit
+python3 tests/integrity.py
+node --experimental-strip-types tests/domain.mjs
 ```
 
-Demo accounts created by `npm run seed`:
-
-| Role            | Username     | Password    |
-|-----------------|--------------|-------------|
-| Admin Staff     | `admin`      | `password123` |
-| Field Personnel | `responder1` | `password123` |
-
-### API overview
-
-| Method | Path | Auth | Notes |
-|---|---|---|---|
-| POST | `/api/auth/register` | — | role is user-selected: `ADMIN_STAFF` or `FIELD_PERSONNEL` |
-| POST | `/api/auth/login` | — | returns `{ user, token }` |
-| GET  | `/api/auth/me` | ✓ | resolves current token |
-| POST | `/api/auth/forgot-password/request` | — | `{ identifier, channel: 'email'\|'sms' }` — sends a 6-digit PIN |
-| POST | `/api/auth/forgot-password/verify` | — | `{ identifier, pin }` |
-| POST | `/api/auth/forgot-password/reset` | — | `{ identifier, pin, new_password }` |
-| GET/POST/PUT/DELETE | `/api/users` | ✓ (write = Admin Staff) | |
-| GET/POST/PUT/DELETE | `/api/centers` | ✓ | POST/PUT accept multipart `image` file |
-| GET | `/api/evacuees` | ✓ | joined roster with family, center, priority tags |
-| POST | `/api/evacuees/register` | ✓ | creates family (if new) + evacuee + record, updates occupancy |
-| PUT | `/api/evacuees/:id` | ✓ | edit name/age/gender |
-| PATCH | `/api/evacuees/:id/checkout` | ✓ | |
-| DELETE | `/api/evacuees/:id` | ✓ | rolls back center occupancy if still "Present" |
-| GET/POST | `/api/incidents` | ✓ | |
-| PATCH | `/api/incidents/:id/status` | ✓ | |
-| GET/POST/PATCH/DELETE | `/api/priority-cases` | ✓ | |
-| GET/POST | `/api/dromic` | ✓ | `GET /:id/summary` compiles live figures |
-| GET | `/api/dromic/:id/pdf` | ✓ | A4 PDF download of the report |
-| GET/PATCH/DELETE | `/api/notifications*` | ✓ | list, mark read/unread, delete, mark-all-read |
-
-All writes broadcast a matching Socket.io event (`center_updated`,
-`evacuee_registered`, `new_incident_dispatched`, `incident_status_changed`,
-`priority_case_flagged`, `user_updated`, `dromic_report_generated`) plus a
-generic `notification` event the Topbar bell listens for — this is the
-"Transmits data via Starlink" / real-time layer from the activity diagram,
-implemented as WebSocket push instead of a literal satellite link.
-
-## 3. Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev                 # http://localhost:5173
-```
-
-If your API isn't on `http://localhost:5000`, create `frontend/.env`:
-
-```
-VITE_API_URL=http://your-api-host:5000
-```
-
-## Design notes
-
-- The whole UI sits on a fixed, blurred gradient backdrop (`.rescom-bg` in
-  `index.css`) with `backdrop-filter: blur()` glass panels on top — that's
-  what makes the glassmorphism actually read as glass instead of flat gray.
-- Tailwind tokens for the glass system live in `frontend/tailwind.config.js`
-  (`shadow-glass`, `rounded-glass`, accent/danger/warn/success/pink colors).
-- `GlassPanel.jsx` and the `glass` / `glass-strong` / `glass-dark` CSS classes
-  are the three panel intensities used throughout — sidebar/topbar use
-  `glass-dark`, cards use `glass`, modals use `glass-strong`.
-
-## Update: UI refresh
-- Flat, solid surfaces (glassmorphism and backdrop blur removed).
-- New Login/Register screens; assets in `frontend/src/assets/`.
-- Free API: Open-Meteo weather card on the Dashboard (no key needed).
-
-## Update: full-functionality pass
-
-- **Demo login shortcuts removed** from the Login screen.
-- **Success modal** — a real modal (not a toast) with an animated green
-  checkmark, used for center/report actions. Auto-dismisses after ~1.8s, or
-  tap **Cancel** to close it immediately. See `UiContext.openSuccess()`.
-- **Evacuees — full CRUD**: edit (name/age/gender) and delete (with
-  confirmation) alongside check-out. Deleting an evacuee who's still
-  "Present" correctly rolls back that center's occupancy count.
-- **DROMIC reports → A4 PDF**: `GET /api/dromic/:id/pdf` renders an
-  official-looking A4 PDF (via `pdfkit`) with incident details, summary
-  figures, priority-case breakdown and center occupancy. "Download PDF"
-  buttons are on the reports table and inside the summary modal.
-- **Notifications, fully wired**: notifications now persist per-user in
-  Postgres (`NOTIFICATIONS` + `USER_NOTIFICATIONS`). The bell dropdown
-  supports opening/reading a notification, a **`…`** menu per item
-  (mark read/unread, delete, view), **Mark all read**, and a **View all**
-  full-list modal. New endpoints: `GET/PATCH/DELETE /api/notifications*`.
-- **Forgot password — real PIN flow**: `POST /api/auth/forgot-password/request`
-  (`{ identifier, channel: 'email'|'sms' }`) emails or texts a 6-digit PIN,
-  `/verify` checks it, `/reset` sets the new password. Configure SMTP (Gmail
-  App Password) and/or an SMS gateway in `backend/.env` — see
-  `backend/.env.example`. Without config, the PIN is logged to the server
-  console so the flow still works in local dev.
-- **Terms of Service & Privacy Policy** now pop up as a single reviewable
-  modal from Register (tap the link, or it auto-checks the box on "I Agree").
-- **Sign-up roles (hardened for deployment)**: the first account ever created
-  becomes Admin Staff; everyone after that self-registers as Field Personnel and
-  only an Admin can create/promote admins from the Users page. Set
-  `ALLOW_PUBLIC_REGISTRATION=false` to close self-registration entirely.
-- **Evacuation Centers — photos**: add/edit a center now includes an image
-  upload (multipart via `multer`), shown as a card header photo. Files land
-  in `backend/uploads/centers/` and are served from `/uploads/centers/...`.
-- **Dashboard charts** (via `recharts`): center occupancy vs. capacity
-  (stacked bars), incidents by severity (donut), priority cases by type
-  (horizontal bars) — all computed live from the same API data.
-
-### Upgrading an existing database
-
-If you already ran `schema.sql` once, don't re-run it (it drops tables).
-Instead apply the additive migration:
-
-```bash
-psql -d mdrrmo_db -f backend/migrations/001_upgrade.sql
-```
-
-This adds `USERS.phone`, `EVACUATION_CENTERS.image_url`, and the
-`NOTIFICATIONS` / `USER_NOTIFICATIONS` / `PASSWORD_RESETS` tables without
-touching existing rows. Fresh installs can just load `schema.sql` — it
-already includes everything.
-
-### New backend dependencies
-
-```bash
-cd backend
-npm install     # now also pulls in multer, pdfkit, nodemailer
-```
-
-
-## Deploying
-
-See **[DEPLOY.md](DEPLOY.md)** for the step-by-step guide (Netlify frontend +
-Render backend + Neon database for a free demo, or one VPS for real use).
-Deployment-ready changes: `DATABASE_URL` support with SSL, `helmet`, rate
-limiting on login/sign-up/password reset, multi-origin CORS, the reset PIN is
-never returned to the browser when `NODE_ENV=production`, Brevo HTTPS email
-(for hosts that block SMTP), `UPLOAD_DIR` for photo storage, and `multer` v2.
-
-```bash
-cd backend && npm install   # pulls in helmet, express-rate-limit, multer 2
-```
+The municipal seal comes from the supplied RESCOM source archive. The landing photo is [Karlo King, Unsplash](https://unsplash.com/photos/WRBEzYe6TIU), an illustrative Philippine community. DM Sans and Manrope are self-hosted under the SIL Open Font License.

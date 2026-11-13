@@ -5,8 +5,7 @@
   "engines": { "node": ">=20.6.0" },
   "scripts": {
     "probe": "node relay.js --probe",
-    "report": "node --env-file=.env relay.js --once",
-    "start": "node --env-file=.env relay.js"
+    "start": "node relay.js"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.0",

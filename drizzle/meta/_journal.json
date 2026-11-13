@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1793634042122,
+      "tag": "0000_next_lilith",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793634955400,
+      "tag": "0001_record_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793635460488,
+      "tag": "0002_owner_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794576544969,
+      "tag": "0003_thick_rhodey",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794577495929,
+      "tag": "0004_known_mattie_franklin",
+      "breakpoints": true
+    }
+  ]
+}

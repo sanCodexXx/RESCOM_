@@ -19,7 +19,11 @@ message DiagnosticsResponse {
 
 message Dish {
   string id = 1;
+  string hardware_version = 2;
+  string software_version = 3;
   Alerts alerts = 5;
+  int32 disablement_code = 6;
+  bool stowed = 10;
 }
 
 message Alerts {
